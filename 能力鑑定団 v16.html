@@ -203,6 +203,17 @@
   .toggle{font-size:12px; color:var(--gc); transition:transform .2s ease; margin-left:4px;}
   .group.open .toggle{transform:rotate(180deg);}
 
+  .group-foot{
+    display:flex; align-items:center; gap:12px; padding:14px 10px 14px 12px;
+    cursor:pointer; user-select:none; margin-top:12px;
+    border-top:1px dashed var(--line);
+    background:linear-gradient(90deg, color-mix(in srgb, var(--gc) 8%, transparent), transparent 70%);
+  }
+  .group-foot h2{
+    font-family:'Zen Maru Gothic', serif; font-size:14px; font-weight:700; margin:0; flex:1;
+    color:var(--gc);
+  }
+
   .group-body{
     max-height:0; overflow:hidden; transition:max-height .3s ease;
   }
@@ -244,6 +255,20 @@
   .subtoggle{font-size:11px; color:var(--gc); transition:transform .2s ease;}
   .subgroup.open .subtoggle{transform:rotate(180deg);}
   .subgroup-body{max-height:0; overflow:hidden; transition:max-height .3s ease;}
+  .subfoot{
+    font-size:13px; color:var(--ink); font-family:'Zen Maru Gothic', sans-serif; font-weight:700;
+    margin:8px 0 4px; padding:7px 10px;
+    letter-spacing:0.03em; border-top:1px dashed var(--gc);
+    display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;
+  }
+  .subfoot:hover{background:color-mix(in srgb, var(--gc) 10%, #fff);}
+  .expand-all-btn{
+    display:block; width:100%; margin:2px 0 10px; padding:8px 10px;
+    font-size:12px; font-weight:700; font-family:'Zen Kaku Gothic New', sans-serif;
+    background:transparent; border:1.5px dashed var(--gc); border-radius:8px;
+    color:var(--gc); cursor:pointer;
+  }
+  .expand-all-btn:hover{background:color-mix(in srgb, var(--gc) 10%, #fff);}
 
   .row{
     display:grid; grid-template-columns:1fr auto; grid-template-rows:auto auto;
@@ -853,6 +878,8 @@ const UI_TEXT = {
   coefLabel: { ja:'係数', en:'Coef' },
   multLabel: { ja:'補正倍率', en:'Multiplier' },
   multNote: { ja:'※使用中はランキング対象外になります', en:'*Using this excludes you from the ranking' },
+  expandAll: { ja:'▾ すべて開く', en:'▾ Expand all' },
+  collapseAll: { ja:'▴ すべて閉じる', en:'▴ Collapse all' },
   personPrefix: { ja:'人物', en:'Person' },
   settingsTitle: { ja:'設定', en:'Settings' },
   languageLabel: { ja:'言語', en:'Language' },
@@ -1205,6 +1232,38 @@ function buildDOM(){
       const groupBody = multEl.closest('.group-body');
       if(groupBody) setTimeout(() => { groupBody.style.maxHeight = groupBody.scrollHeight + 'px'; }, 310);
     });
+
+    const expandAllBtnTop = document.createElement('button');
+    expandAllBtnTop.className = 'expand-all-btn';
+    inner.appendChild(expandAllBtnTop);
+    const expandAllBtns = [expandAllBtnTop];
+    const subgroups = [];
+    function setSubgroupOpen(sg, open){
+      if(open){
+        sg.wrap.classList.add('open');
+        sg.body.style.maxHeight = sg.body.scrollHeight + 'px';
+      } else {
+        sg.body.style.maxHeight = '0px';
+        sg.wrap.classList.remove('open');
+      }
+    }
+    function updateExpandAllLabel(){
+      const allOpen = subgroups.length > 0 && subgroups.every(sg => sg.wrap.classList.contains('open'));
+      expandAllBtns.forEach(btn => { btn.textContent = allOpen ? t('collapseAll') : t('expandAll'); });
+    }
+    function bumpGroupBodyHeight(){
+      const groupBody = document.getElementById('body-'+gi);
+      if(groupBody && groupEl.classList.contains('open')) groupBody.style.maxHeight = groupBody.scrollHeight + 'px';
+    }
+    function handleExpandAllClick(){
+      const allOpen = subgroups.length > 0 && subgroups.every(sg => sg.wrap.classList.contains('open'));
+      const nextOpen = !allOpen;
+      subgroups.forEach(sg => setSubgroupOpen(sg, nextOpen));
+      updateExpandAllLabel();
+      setTimeout(bumpGroupBodyHeight, 310);
+    }
+    expandAllBtnTop.addEventListener('click', handleExpandAllClick);
+
     g.items.forEach((item, ii) => {
       const subs = item.subs ? item.subs : [{n: item.name, c: item.c, d: item.d}];
       const wrap = document.createElement('div');
@@ -1224,18 +1283,40 @@ function buildDOM(){
         const refName = item.subs ? s.n : item.name;
         body.appendChild(makeRow(id, label, s.c, s.d, refName));
       });
-      sh.addEventListener('click', () => {
-        const isOpen = wrap.classList.contains('open');
-        if(isOpen){
-          body.style.maxHeight = '0px';
-          wrap.classList.remove('open');
-        } else {
-          wrap.classList.add('open');
-          body.style.maxHeight = body.scrollHeight + 'px';
-        }
+      const subFoot = document.createElement('div');
+      subFoot.className = 'subfoot';
+      subFoot.innerHTML = `<span>${tName(item.name)}</span><span class="subtoggle">▾</span>`;
+      body.appendChild(subFoot);
+
+      const sg = { wrap, body };
+      subgroups.push(sg);
+      const toggleThis = (scrollBack) => {
+        setSubgroupOpen(sg, !wrap.classList.contains('open'));
+        updateExpandAllLabel();
         const groupBody = wrap.closest('.group-body');
         if(groupBody) setTimeout(() => { groupBody.style.maxHeight = groupBody.scrollHeight + 'px'; }, 310);
-      });
+        if(scrollBack) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      sh.addEventListener('click', () => toggleThis(false));
+      subFoot.addEventListener('click', () => toggleThis(true));
+    });
+    const expandAllBtnBottom = document.createElement('button');
+    expandAllBtnBottom.className = 'expand-all-btn';
+    inner.appendChild(expandAllBtnBottom);
+    expandAllBtns.push(expandAllBtnBottom);
+    expandAllBtnBottom.addEventListener('click', handleExpandAllClick);
+    updateExpandAllLabel();
+    const footEl = document.createElement('div');
+    footEl.className = 'group-foot';
+    footEl.innerHTML = `
+      <span class="eyebrow">${KNUM[gi]}</span>
+      <h2>${tName(g.name)}</h2>
+      <span class="toggle">▾</span>
+    `;
+    inner.appendChild(footEl);
+    footEl.addEventListener('click', () => {
+      toggleGroup(gi);
+      groupEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     groupEl.querySelector('.group-head').addEventListener('click', () => toggleGroup(gi));
   });
