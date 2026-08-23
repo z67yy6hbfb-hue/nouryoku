@@ -103,7 +103,7 @@
   .participant-btn.active{background:linear-gradient(135deg, #8b5cf6, #2f7dd1); border-color:var(--ink); color:#fff;}
 
   .person-nav-fixed{
-    position:fixed; left:8px; top:50%; transform:translateY(-50%);
+    position:fixed; top:50%; transform:translateY(-50%);
     display:flex; flex-direction:column; gap:8px; z-index:850;
   }
   .person-nav-btn{
@@ -116,9 +116,6 @@
   }
   .person-nav-btn:active{ transform:translateY(1px); box-shadow:0 1px 1px rgba(0,0,0,0.2); }
   .person-nav-btn:disabled{ opacity:0.3; cursor:default; }
-  @media (max-width:480px){
-    .person-nav-fixed{ left:4px; }
-  }
 
   .person-tabs{
     display:flex; gap:6px; justify-content:flex-start; margin-bottom:10px;
@@ -360,6 +357,16 @@
     background:transparent; color:var(--ink-soft); cursor:pointer; font-family:'Yuji Syuku', serif; font-weight:400;
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     transition:all .15s ease; position:relative;
+  }
+  @keyframes lvlBtnBounce{
+    0%{ transform:scale(1); }
+    35%{ transform:scale(1.35); }
+    60%{ transform:scale(0.88); }
+    100%{ transform:scale(1); }
+  }
+  .lvl-btn.bounce{ animation:lvlBtnBounce .4s cubic-bezier(.34,1.56,.64,1); }
+  @media (prefers-reduced-motion: reduce){
+    .lvl-btn.bounce{ animation:none; }
   }
   .lvl-sub{
     position:absolute; bottom:-6px; right:-6px; font-size:10px; line-height:1; z-index:5;
@@ -1596,8 +1603,46 @@ document.addEventListener('click', (e) => {
     row.querySelectorAll('.lvl-btn').forEach(b => b.classList.toggle('active', state.entries[id].level === b.dataset.level));
     confirmed = false;
     recalc();
+    bounceButton(lvlBtn);
+    playCoinSound();
   }
 });
+
+function bounceButton(el){
+  el.classList.remove('bounce');
+  void el.offsetWidth; // restart the animation even if it's already mid-bounce
+  el.classList.add('bounce');
+}
+
+let audioCtx = null;
+function getAudioContext(){
+  if(!audioCtx){
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if(!Ctor) return null;
+    try{ audioCtx = new Ctor(); }catch(err){ return null; }
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function playCoinSound(){
+  const ctx = getAudioContext();
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  // classic two-note coin chime: a quick high blip then a higher sustained ping
+  [{freq:987.77, start:0, dur:0.09}, {freq:1318.51, start:0.07, dur:0.22}].forEach(note => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(note.freq, now + note.start);
+    gain.gain.setValueAtTime(0.0001, now + note.start);
+    gain.gain.exponentialRampToValueAtTime(0.16, now + note.start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now + note.start);
+    osc.stop(now + note.start + note.dur + 0.02);
+  });
+}
 
 document.addEventListener('input', (e) => {
   if(e.target.classList.contains('coef-input')){
@@ -3489,7 +3534,22 @@ function updatePersonNavUI(){
   const nextBtn = document.getElementById('personNavNext');
   if(prevBtn) prevBtn.disabled = activeProfile <= 0;
   if(nextBtn) nextBtn.disabled = activeProfile >= participantCount - 1;
+  positionPersonNav();
 }
+
+// Lines the nav up with the actual card (which is centered and capped at max-width),
+// not a raw viewport offset - so it stays correctly placed on wide desktop windows too.
+function positionPersonNav(){
+  const nav = document.getElementById('personNavFixed');
+  const midBtn = document.querySelector('.lvl-btn[data-level="inter_advanced"]');
+  if(!nav || !midBtn) return;
+  const rect = midBtn.getBoundingClientRect();
+  const navBtnWidth = 22; // matches .person-nav-btn width
+  const rowLevelsGap = 6; // matches .row-levels gap, so the spacing matches button-to-button spacing
+  const left = Math.max(4, rect.left - rowLevelsGap - navBtnWidth);
+  nav.style.left = left + 'px';
+}
+window.addEventListener('resize', () => { positionPersonNav(); });
 function switchProfileRelative(delta){
   const next = activeProfile + delta;
   if(next < 0 || next >= participantCount) return;
