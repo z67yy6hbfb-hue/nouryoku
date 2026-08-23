@@ -173,10 +173,28 @@
   }
 
   .chart-wrap{
-    max-width:560px; margin:0 auto 20px; padding:22px 14px;
+    max-width:700px; margin:0 auto 20px; padding:22px 14px;
     background:radial-gradient(ellipse at 30% 20%, #2a3a5c, #0f1a30 70%);
     border-radius:16px; box-shadow:0 6px 22px rgba(0,0,0,0.35), inset 0 0 30px rgba(80,120,200,0.15);
     position:relative; overflow:hidden;
+  }
+  .chart-stats-row{ display:flex; align-items:center; gap:10px; }
+  .radar-svg{ width:54%; height:auto; flex-shrink:0; }
+  .level-stats{ flex:1; min-width:0; overflow-x:auto; }
+  .level-stats table{ width:100%; border-collapse:collapse; font-size:10px; font-family:'Zen Kaku Gothic New', sans-serif; }
+  .level-stats th, .level-stats td{ padding:3px 3px; text-align:center; white-space:nowrap; color:#c9d4f5; font-variant-numeric:tabular-nums; }
+  .level-stats thead th{ font-weight:700; color:#8fa3d9; border-bottom:1px solid rgba(255,255,255,0.22); padding-bottom:5px; }
+  .level-stats tbody td:first-child, .level-stats thead th:first-child{
+    text-align:left; color:#fff; font-weight:700; padding-right:8px; max-width:64px; overflow:hidden; text-overflow:ellipsis;
+  }
+  .level-stats tbody tr:not(:last-child) td{ border-bottom:1px solid rgba(255,255,255,0.08); }
+  .level-stats tr.total-row td{ border-top:1px solid rgba(244,197,66,0.5); border-bottom:none !important; font-weight:800; color:#f4c542; padding-top:5px; }
+  .level-stats td.lvl-count-zero{ color:rgba(201,212,245,0.28); }
+  @media (max-width:600px){
+    .chart-stats-row{ flex-direction:column; }
+    .radar-svg{ width:100%; }
+    .level-stats{ width:100%; }
+    .level-stats table{ font-size:11px; }
   }
 
   .group{border-top:1px solid var(--line); }
@@ -645,7 +663,12 @@
     <div id="groups"></div>
 
     <div class="result-section" id="resultSection">
-      <div class="chart-wrap"><svg id="radarSvg" viewBox="0 0 400 400" style="width:100%;height:auto;"></svg></div>
+      <div class="chart-wrap">
+        <div class="chart-stats-row">
+          <svg id="radarSvg" viewBox="0 0 400 400" class="radar-svg"></svg>
+          <div class="level-stats" id="levelStats"></div>
+        </div>
+      </div>
       <div class="valuation">
         <div class="label" id="valuationLabelEl">総合鑑定額</div>
         <div class="amount pending" id="valuationAmount">???</div>
@@ -1311,6 +1334,7 @@ function buildDOM(){
     footEl.innerHTML = `
       <span class="eyebrow">${KNUM[gi]}</span>
       <h2>${tName(g.name)}</h2>
+      <div class="group-meta"><span class="subtotal" id="subtotal-foot-${gi}">0.0</span>${t('pt')}<br><span id="avgline-foot-${gi}">${t('avgPrefix')} 0.0</span></div>
       <span class="toggle">▾</span>
     `;
     inner.appendChild(footEl);
@@ -1588,6 +1612,7 @@ const radarRadiusFor = (val, baseline) => {
 function initChart(){
   renderRadarStatic();
   updateRadarData();
+  renderLevelStats();
 }
 
 // Builds everything that doesn't change between clicks (defs, grid, axis lines, labels).
@@ -1684,6 +1709,59 @@ function updateRadarData(){
   target.setAttribute('stroke', anyBroken ? '#f4c542' : '#ffffff');
 }
 
+const LEVEL_COLS = LEVELS.filter(l => l.key !== 'none');
+
+// Tallies how many leaf items sit at each level, per group and overall, for the active profile (state).
+function computeLevelCounts(){
+  const perGroup = GROUPS.map(() => {
+    const counts = {};
+    LEVEL_COLS.forEach(l => { counts[l.key] = 0; });
+    return counts;
+  });
+  const overall = {};
+  LEVEL_COLS.forEach(l => { overall[l.key] = 0; });
+  GROUPS.forEach((g, gi) => {
+    g.items.forEach((item, ii) => {
+      const subCount = item.subs ? item.subs.length : 1;
+      for(let si = 0; si < subCount; si++){
+        const id = item.subs ? `g${gi}i${ii}s${si}` : `g${gi}i${ii}`;
+        const e = state.entries[id];
+        if(!e || e.level === 'none') continue;
+        perGroup[gi][e.level] = (perGroup[gi][e.level] || 0) + 1;
+        overall[e.level] = (overall[e.level] || 0) + 1;
+      }
+    });
+  });
+  return { perGroup, overall };
+}
+
+function renderLevelStats(){
+  const panel = document.getElementById('levelStats');
+  if(!panel) return;
+  const { perGroup, overall } = computeLevelCounts();
+  const headerCells = LEVEL_COLS.map(l => {
+    const label = lang === 'en' ? LEVEL_LABEL_EN[l.key] : (l.label + (l.sub || ''));
+    return `<th title="${escapeHTML(levelFull(l.key))}">${label}</th>`;
+  }).join('');
+  const rows = GROUPS.map((g, gi) => {
+    const cells = LEVEL_COLS.map(l => {
+      const n = perGroup[gi][l.key] || 0;
+      return `<td class="${n === 0 ? 'lvl-count-zero' : ''}">${n}</td>`;
+    }).join('');
+    return `<tr><td>${escapeHTML(tName(g.name))}</td>${cells}</tr>`;
+  }).join('');
+  const totalCells = LEVEL_COLS.map(l => `<td>${overall[l.key] || 0}</td>`).join('');
+  panel.innerHTML = `
+    <table>
+      <thead><tr><th></th>${headerCells}</tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="total-row"><td>${t('overall')}</td>${totalCells}</tr>
+      </tbody>
+    </table>
+  `;
+}
+
 let confirmed = false;
 let currentTotal = 0;
 let currentGroupTotals = [];
@@ -1729,11 +1807,14 @@ function recalc(){
     radarBaseline[gi] = baselineTotal / g.items.length;
     document.getElementById('subtotal-'+gi).textContent = groupTotal.toFixed(1);
     document.getElementById('avgline-'+gi).textContent = t('avgPrefix') + ' ' + avg.toFixed(1);
+    document.getElementById('subtotal-foot-'+gi).textContent = groupTotal.toFixed(1);
+    document.getElementById('avgline-foot-'+gi).textContent = t('avgPrefix') + ' ' + avg.toFixed(1);
     total += groupTotal;
     groupTotals.push(groupTotal);
     radarValues[gi] = avg;
   });
   updateRadarData();
+  renderLevelStats();
   currentTotal = total;
   currentGroupTotals = groupTotals;
   updateMultiPersonColors();
