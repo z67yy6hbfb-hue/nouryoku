@@ -102,6 +102,24 @@
   }
   .participant-btn.active{background:linear-gradient(135deg, #8b5cf6, #2f7dd1); border-color:var(--ink); color:#fff;}
 
+  .person-nav-fixed{
+    position:fixed; left:8px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; gap:8px; z-index:850;
+  }
+  .person-nav-btn{
+    width:22px; height:22px; padding:0; border-radius:5px; border:1.5px solid var(--ink);
+    background:linear-gradient(180deg, #fdfbf3, #ddd2ac);
+    box-shadow:0 2px 3px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.7);
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; line-height:1; color:var(--ink); cursor:pointer;
+    font-family:'Zen Kaku Gothic New', sans-serif;
+  }
+  .person-nav-btn:active{ transform:translateY(1px); box-shadow:0 1px 1px rgba(0,0,0,0.2); }
+  .person-nav-btn:disabled{ opacity:0.3; cursor:default; }
+  @media (max-width:480px){
+    .person-nav-fixed{ left:4px; }
+  }
+
   .person-tabs{
     display:flex; gap:6px; justify-content:flex-start; margin-bottom:10px;
     position:sticky; top:0; z-index:40; padding:8px 6px;
@@ -840,6 +858,11 @@
 </nav>
 
 <div class="lvl-tooltip" id="lvlTooltip"></div>
+
+<div class="person-nav-fixed" id="personNavFixed" style="display:none;">
+  <button class="person-nav-btn" id="personNavPrev" type="button" aria-label="前の人物" title="前の人物 (←)">◀</button>
+  <button class="person-nav-btn" id="personNavNext" type="button" aria-label="次の人物" title="次の人物 (→)">▶</button>
+</div>
 
 <script>
 let lang = 'ja';
@@ -3439,6 +3462,7 @@ function renderPersonTabs(){
   if(participantCount <= 1){
     tabsEl.style.display = 'none';
     tabsEl.innerHTML = '';
+    updatePersonNavUI();
     return;
   }
   tabsEl.style.display = 'flex';
@@ -3452,7 +3476,36 @@ function renderPersonTabs(){
   tabsEl.querySelectorAll('.person-tab').forEach(btn => {
     btn.addEventListener('click', () => switchProfile(parseInt(btn.dataset.i, 10)));
   });
+  updatePersonNavUI();
 }
+
+// Fixed left/right nav (mirrors PC ArrowLeft/ArrowRight) for switching the active person,
+// always visible on screen regardless of scroll position.
+function updatePersonNavUI(){
+  const nav = document.getElementById('personNavFixed');
+  if(!nav) return;
+  nav.style.display = participantCount > 1 ? 'flex' : 'none';
+  const prevBtn = document.getElementById('personNavPrev');
+  const nextBtn = document.getElementById('personNavNext');
+  if(prevBtn) prevBtn.disabled = activeProfile <= 0;
+  if(nextBtn) nextBtn.disabled = activeProfile >= participantCount - 1;
+}
+function switchProfileRelative(delta){
+  const next = activeProfile + delta;
+  if(next < 0 || next >= participantCount) return;
+  switchProfile(next);
+}
+document.getElementById('personNavPrev').addEventListener('click', () => switchProfileRelative(-1));
+document.getElementById('personNavNext').addEventListener('click', () => switchProfileRelative(1));
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const active = document.activeElement;
+  const tag = active ? active.tagName : '';
+  if(tag === 'INPUT' || tag === 'TEXTAREA' || (active && active.isContentEditable)) return;
+  if(participantCount <= 1) return;
+  e.preventDefault();
+  switchProfileRelative(e.key === 'ArrowLeft' ? -1 : 1);
+});
 
 function updateActiveTabLabel(){
   if(participantCount <= 1) return;
