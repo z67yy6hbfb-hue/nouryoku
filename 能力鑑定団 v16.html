@@ -117,6 +117,22 @@
   .person-nav-btn:active{ transform:translateY(1px); box-shadow:0 1px 1px rgba(0,0,0,0.2); }
   .person-nav-btn:disabled{ opacity:0.3; cursor:default; }
 
+  .petal-overlay{ position:fixed; inset:0; pointer-events:none; z-index:1200; overflow:hidden; }
+  .petal{
+    position:absolute; top:-24px; left:0;
+    border-radius:0% 70% 0% 70%;
+    opacity:0.95;
+    animation-name:petalFall; animation-timing-function:ease-in; animation-fill-mode:forwards;
+    will-change:transform, opacity;
+  }
+  @keyframes petalFall{
+    0%{ transform:translate(0,0) rotate(0deg); opacity:0.95; }
+    100%{ transform:translate(var(--petal-drift), var(--petal-fall)) rotate(var(--petal-spin)); opacity:0; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .petal{ display:none; }
+  }
+
   .person-tabs{
     display:flex; gap:6px; justify-content:flex-start; margin-bottom:10px;
     position:sticky; top:0; z-index:40; padding:8px 6px;
@@ -871,6 +887,8 @@
   <button class="person-nav-btn" id="personNavNext" type="button" aria-label="次の人物" title="次の人物 (→)">▶</button>
 </div>
 
+<div class="petal-overlay" id="petalOverlay"></div>
+
 <script>
 let lang = 'ja';
 
@@ -1605,6 +1623,9 @@ document.addEventListener('click', (e) => {
     recalc();
     bounceButton(lvlBtn);
     playCoinSound();
+    if(level === 'extreme' && state.entries[id].level === 'extreme'){
+      spawnPetals();
+    }
   }
 });
 
@@ -1642,6 +1663,39 @@ function playCoinSound(){
     osc.start(now + note.start);
     osc.stop(now + note.start + note.dur + 0.02);
   });
+}
+
+const PETAL_COLORS = [
+  'linear-gradient(135deg, #f7c6d9, #e08bab)',
+  'linear-gradient(135deg, #ffe3ef, #f0a8c4)',
+  'linear-gradient(135deg, #f4c542, #c9971f)',
+];
+function spawnPetals(){
+  const overlay = document.getElementById('petalOverlay');
+  if(!overlay) return;
+  const count = 22;
+  for(let i = 0; i < count; i++){
+    const petal = document.createElement('div');
+    petal.className = 'petal';
+    const startX = Math.random() * window.innerWidth;
+    const drift = (Math.random() - 0.5) * 200;
+    const fall = window.innerHeight + 80;
+    const spin = (180 + Math.random() * 360) * (Math.random() < 0.5 ? -1 : 1);
+    const duration = 2200 + Math.random() * 1600;
+    const delay = Math.random() * 500;
+    const size = 10 + Math.random() * 8;
+    petal.style.left = startX + 'px';
+    petal.style.width = size + 'px';
+    petal.style.height = size + 'px';
+    petal.style.background = PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)];
+    petal.style.setProperty('--petal-drift', drift + 'px');
+    petal.style.setProperty('--petal-fall', fall + 'px');
+    petal.style.setProperty('--petal-spin', spin + 'deg');
+    petal.style.animationDuration = duration + 'ms';
+    petal.style.animationDelay = delay + 'ms';
+    overlay.appendChild(petal);
+    setTimeout(() => petal.remove(), duration + delay + 150);
+  }
 }
 
 document.addEventListener('input', (e) => {
