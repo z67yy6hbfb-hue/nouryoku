@@ -1625,9 +1625,6 @@ document.addEventListener('click', (e) => {
     recalc();
     bounceButton(lvlBtn);
     playCoinSound();
-    if(level === 'extreme' && state.entries[id].level === 'extreme'){
-      spawnPetals();
-    }
   }
 });
 
@@ -1675,7 +1672,7 @@ const PETAL_COLORS = [
 function spawnPetals(){
   const overlay = document.getElementById('petalOverlay');
   if(!overlay) return;
-  const count = 22;
+  const count = 220;
   for(let i = 0; i < count; i++){
     const petal = document.createElement('div');
     petal.className = 'petal';
@@ -1933,6 +1930,12 @@ function recalc(){
     document.getElementById('avgline-'+gi).textContent = t('avgPrefix') + ' ' + avg.toFixed(1);
     document.getElementById('subtotal-foot-'+gi).textContent = groupTotal.toFixed(1);
     document.getElementById('avgline-foot-'+gi).textContent = t('avgPrefix') + ' ' + avg.toFixed(1);
+    if(!state.prevGroupTotals) state.prevGroupTotals = {};
+    const prevGroupTotal = state.prevGroupTotals[gi] || 0;
+    if(prevGroupTotal < 10 && groupTotal >= 10){
+      spawnPetals();
+    }
+    state.prevGroupTotals[gi] = groupTotal;
     total += groupTotal;
     groupTotals.push(groupTotal);
     radarValues[gi] = avg;
@@ -3922,7 +3925,7 @@ function safeRun(fn, label){
 
 safeRun(buildDOM, 'buildDOM');
 function makeEmptyProfile(){
-  return { name:'', entries: JSON.parse(JSON.stringify(baseEntries)), groupMult: JSON.parse(JSON.stringify(baseGroupMult)) };
+  return { name:'', entries: JSON.parse(JSON.stringify(baseEntries)), groupMult: JSON.parse(JSON.stringify(baseGroupMult)), prevGroupTotals: {} };
 }
 let profiles = [makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile()];
 let activeProfile = 0;
