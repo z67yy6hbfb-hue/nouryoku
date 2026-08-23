@@ -173,7 +173,7 @@
   }
 
   .chart-wrap{
-    max-width:420px; margin:0 auto 20px; padding:22px 14px;
+    max-width:560px; margin:0 auto 20px; padding:22px 14px;
     background:radial-gradient(ellipse at 30% 20%, #2a3a5c, #0f1a30 70%);
     border-radius:16px; box-shadow:0 6px 22px rgba(0,0,0,0.35), inset 0 0 30px rgba(80,120,200,0.15);
     position:relative; overflow:hidden;
@@ -1459,17 +1459,15 @@ document.addEventListener('click', (e) => {
     if(groupBody) groupBody.style.maxHeight = groupBody.scrollHeight + 'px';
     return;
   }
-  if(e.target.classList.contains('lvl-btn')){
-    const id = e.target.dataset.id;
-    const level = e.target.dataset.level;
+  const lvlBtn = e.target.closest('.lvl-btn');
+  if(lvlBtn){
+    const id = lvlBtn.dataset.id;
+    const level = lvlBtn.dataset.level;
     state.entries[id].level = (state.entries[id].level === level) ? 'none' : level;
-    const row = e.target.closest('.row');
+    const row = lvlBtn.closest('.row');
     row.querySelectorAll('.lvl-btn').forEach(b => b.classList.toggle('active', state.entries[id].level === b.dataset.level));
     confirmed = false;
     recalc();
-    // adjust open group height in case it changed
-    const groupBody = e.target.closest('.group-body');
-    if(groupBody) groupBody.style.maxHeight = groupBody.scrollHeight + 'px';
   }
 });
 
@@ -1490,28 +1488,35 @@ document.addEventListener('input', (e) => {
 let radarValues = GROUPS.map(() => 0);
 let radarBaseline = GROUPS.map(() => 1);
 
+const RADAR_N = GROUPS.length;
+const RADAR_CX = 200, RADAR_CY = 200, RADAR_R = 91;
+const RADAR_LIMIT_EXTRA = 19; // extra radius budget for values beyond the 中級 baseline (limit line kept at the same absolute radius: 91+19=110, same as the old 72+38)
+const radarAngleFor = (i) => (-90 + i * (360 / RADAR_N)) * Math.PI / 180;
+const radarPointAt = (i, ratio) => ({
+  x: RADAR_CX + ratio * Math.cos(radarAngleFor(i)),
+  y: RADAR_CY + ratio * Math.sin(radarAngleFor(i)),
+});
+const radarRadiusFor = (val, baseline) => {
+  const safeBaseline = baseline > 0 ? baseline : 1;
+  const ratio = val / safeBaseline;
+  if(ratio <= 1) return Math.max(0, ratio) * RADAR_R;
+  // limit break: diminishing-returns curve so it never runs off the canvas
+  return RADAR_R + RADAR_LIMIT_EXTRA * (1 - 1 / ratio);
+};
+
 function initChart(){
-  renderRadarChart();
+  renderRadarStatic();
+  updateRadarData();
 }
 
-function renderRadarChart(){
+// Builds everything that doesn't change between clicks (defs, grid, axis lines, labels).
+// Only called once at startup and when the group labels themselves change (language switch).
+function renderRadarStatic(){
   const svg = document.getElementById('radarSvg');
   if(!svg) return;
-  const n = GROUPS.length;
-  const cx = 200, cy = 200, r = 72;
-  const limitExtra = 38; // extra radius budget for values beyond the 中級 baseline
-  const angleFor = (i) => (-90 + i * (360 / n)) * Math.PI / 180;
-  const pointAt = (i, ratio) => ({
-    x: cx + ratio * Math.cos(angleFor(i)),
-    y: cy + ratio * Math.sin(angleFor(i)),
-  });
-  const radiusFor = (val, baseline) => {
-    const safeBaseline = baseline > 0 ? baseline : 1;
-    const ratio = val / safeBaseline;
-    if(ratio <= 1) return Math.max(0, ratio) * r;
-    // limit break: diminishing-returns curve so it never runs off the canvas
-    return r + limitExtra * (1 - 1 / ratio);
-  };
+  const n = RADAR_N;
+  const cx = RADAR_CX, cy = RADAR_CY, r = RADAR_R, limitExtra = RADAR_LIMIT_EXTRA;
+  const pointAt = radarPointAt;
 
   let svgParts = [];
 
@@ -1556,17 +1561,9 @@ function renderRadarChart(){
     svgParts.push(`<line x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>`);
   });
 
-  // data polygon — vivid gradient fill, glowing edge, clean lines only (no point markers)
-  const dataInfo = GROUPS.map((g, i) => {
-    const baseline = radarBaseline[i];
-    const val = radarValues[i];
-    const rad = radiusFor(val, baseline);
-    const p = pointAt(i, rad);
-    return { p, brokeLimit: val > baseline };
-  });
-  const dataPtsStr = dataInfo.map(d => `${d.p.x.toFixed(1)},${d.p.y.toFixed(1)}`).join(' ');
-  const anyBroken = dataInfo.some(d => d.brokeLimit);
-  svgParts.push(`<polygon points="${dataPtsStr}" fill="url(#statusFill)" fill-opacity="0.55" stroke="${anyBroken ? '#f4c542' : '#ffffff'}" stroke-width="2.5" stroke-linejoin="round" filter="url(#softGlow)"/>`);
+  // data polygon placeholder — its points/stroke are filled in by updateRadarData() on every
+  // recalc, so a level-button click no longer rebuilds the whole chart, only this one element.
+  svgParts.push(`<polygon id="radarDataPolygon" points="" fill="url(#statusFill)" fill-opacity="0.55" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" filter="url(#softGlow)"/>`);
 
   // labels
   GROUPS.forEach((g, i) => {
@@ -1582,6 +1579,28 @@ function renderRadarChart(){
   });
 
   svg.innerHTML = svgParts.join('');
+}
+
+// Cheap per-click update: only recomputes the data polygon's shape, without touching
+// the defs/grid/axis/label markup that renderRadarStatic() already built.
+function updateRadarData(){
+  let target = document.getElementById('radarDataPolygon');
+  if(!target){
+    renderRadarStatic();
+    target = document.getElementById('radarDataPolygon');
+    if(!target) return;
+  }
+  const dataInfo = GROUPS.map((g, i) => {
+    const baseline = radarBaseline[i];
+    const val = radarValues[i];
+    const rad = radarRadiusFor(val, baseline);
+    const p = radarPointAt(i, rad);
+    return { p, brokeLimit: val > baseline };
+  });
+  const dataPtsStr = dataInfo.map(d => `${d.p.x.toFixed(1)},${d.p.y.toFixed(1)}`).join(' ');
+  const anyBroken = dataInfo.some(d => d.brokeLimit);
+  target.setAttribute('points', dataPtsStr);
+  target.setAttribute('stroke', anyBroken ? '#f4c542' : '#ffffff');
 }
 
 let confirmed = false;
@@ -1633,7 +1652,7 @@ function recalc(){
     groupTotals.push(groupTotal);
     radarValues[gi] = avg;
   });
-  renderRadarChart();
+  updateRadarData();
   currentTotal = total;
   currentGroupTotals = groupTotals;
   updateMultiPersonColors();
@@ -1669,14 +1688,14 @@ function revealValuation(finalTotal){
   const start = performance.now();
   function tick(now){
     if(myToken !== revealToken) return;
-    const t = Math.min((now - start) / duration, 1);
-    if(t < 0.7){
+    const progress = Math.min((now - start) / duration, 1);
+    if(progress < 0.7){
       const spread = Math.max(finalYen * 1.4, 50000);
       const rnd = Math.round(Math.random() * spread);
       amountEl.textContent = '¥' + rnd.toLocaleString('ja-JP');
       requestAnimationFrame(tick);
-    } else if(t < 1){
-      const localT = (t - 0.7) / 0.3;
+    } else if(progress < 1){
+      const localT = (progress - 0.7) / 0.3;
       const eased = 1 - Math.pow(1 - localT, 3);
       const val = Math.round(finalYen * eased);
       amountEl.textContent = '¥' + val.toLocaleString('ja-JP');
@@ -3365,7 +3384,8 @@ function rebuildGroupsDOM(){
   buildDOM();
   syncDOMFromState();
   renderPersonTabs();
-  renderRadarChart();
+  renderRadarStatic();
+  updateRadarData();
 }
 
 async function setLanguage(newLang){
