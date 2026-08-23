@@ -114,21 +114,7 @@
   .row-person-hex:active{ transform:scale(0.85); }
   .row-person-hex.active{ opacity:1; transform:scale(1.25); border-color:var(--ink); }
 
-  .petal-overlay{ position:fixed; inset:0; pointer-events:none; z-index:1200; overflow:hidden; }
-  .petal{
-    position:absolute; top:-24px; left:0;
-    border-radius:0% 70% 0% 70%;
-    opacity:0.95;
-    animation-name:petalFall; animation-timing-function:ease-in; animation-fill-mode:forwards;
-    will-change:transform, opacity;
-  }
-  @keyframes petalFall{
-    0%{ transform:translate(0,0) rotate(0deg); opacity:0.95; }
-    100%{ transform:translate(var(--petal-drift), var(--petal-fall)) rotate(var(--petal-spin)); opacity:0; }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .petal{ display:none; }
-  }
+  #fireworksCanvas{ position:fixed; inset:0; pointer-events:none; z-index:1200; }
 
   .person-tabs{
     display:flex; gap:6px; justify-content:flex-start; margin-bottom:10px;
@@ -883,7 +869,7 @@
 <div class="lvl-tooltip" id="lvlTooltip"></div>
 
 
-<div class="petal-overlay" id="petalOverlay"></div>
+<canvas id="fireworksCanvas"></canvas>
 
 <script>
 let lang = 'ja';
@@ -1664,36 +1650,130 @@ function playCoinSound(){
   });
 }
 
-const PETAL_COLORS = [
-  'linear-gradient(135deg, #f7c6d9, #e08bab)',
-  'linear-gradient(135deg, #ffe3ef, #f0a8c4)',
-  'linear-gradient(135deg, #f4c542, #c9971f)',
-];
-function spawnPetals(){
-  const overlay = document.getElementById('petalOverlay');
-  if(!overlay) return;
-  const count = 220;
+const FIREWORK_COLORS = ['#ff5e5e', '#ffd166', '#4fd1a5', '#5b8cff', '#c77dff', '#ff9ff3', '#ffffff'];
+let fireworkParticles = [];
+let fireworkRafId = null;
+let fireworkLastTime = null;
+
+function ensureFireworksCanvas(){
+  const canvas = document.getElementById('fireworksCanvas');
+  if(!canvas) return null;
+  const w = window.innerWidth, h = window.innerHeight;
+  if(canvas.width !== w || canvas.height !== h){
+    canvas.width = w;
+    canvas.height = h;
+  }
+  return canvas;
+}
+
+function explodeFirework(x, y){
+  const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+  const count = 46 + Math.floor(Math.random() * 20);
   for(let i = 0; i < count; i++){
-    const petal = document.createElement('div');
-    petal.className = 'petal';
-    const startX = Math.random() * window.innerWidth;
-    const drift = (Math.random() - 0.5) * 200;
-    const fall = window.innerHeight + 80;
-    const spin = (180 + Math.random() * 360) * (Math.random() < 0.5 ? -1 : 1);
-    const duration = 2200 + Math.random() * 1600;
-    const delay = Math.random() * 500;
-    const size = 10 + Math.random() * 8;
-    petal.style.left = startX + 'px';
-    petal.style.width = size + 'px';
-    petal.style.height = size + 'px';
-    petal.style.background = PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)];
-    petal.style.setProperty('--petal-drift', drift + 'px');
-    petal.style.setProperty('--petal-fall', fall + 'px');
-    petal.style.setProperty('--petal-spin', spin + 'deg');
-    petal.style.animationDuration = duration + 'ms';
-    petal.style.animationDelay = delay + 'ms';
-    overlay.appendChild(petal);
-    setTimeout(() => petal.remove(), duration + delay + 150);
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.2;
+    const speed = 2 + Math.random() * 3;
+    const life = 900 + Math.random() * 400;
+    fireworkParticles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color,
+      life,
+      maxLife: life,
+    });
+  }
+  playBoomSound();
+  startFireworksLoop();
+}
+
+function startFireworksLoop(){
+  if(fireworkRafId) return;
+  fireworkLastTime = null;
+  const step = (now) => {
+    if(fireworkLastTime === null) fireworkLastTime = now;
+    const dt = Math.min(now - fireworkLastTime, 40);
+    fireworkLastTime = now;
+    const canvas = ensureFireworksCanvas();
+    if(canvas){
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      fireworkParticles.forEach(p => {
+        p.vy += 0.0012 * dt;
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        p.life -= dt;
+      });
+      fireworkParticles = fireworkParticles.filter(p => p.life > 0);
+      fireworkParticles.forEach(p => {
+        ctx.beginPath();
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+    if(fireworkParticles.length > 0){
+      fireworkRafId = requestAnimationFrame(step);
+    } else {
+      fireworkRafId = null;
+      if(canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+  fireworkRafId = requestAnimationFrame(step);
+}
+
+function playBoomSound(){
+  const ctx = getAudioContext();
+  if(!ctx) return;
+  const now = ctx.currentTime;
+  const bufferSize = Math.floor(ctx.sampleRate * 0.5);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i = 0; i < bufferSize; i++){
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+  }
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(1800, now);
+  filter.frequency.exponentialRampToValueAtTime(120, now + 0.4);
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.35, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  noise.connect(filter);
+  filter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + 0.5);
+
+  const osc = ctx.createOscillator();
+  const oscGain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(120, now);
+  osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
+  oscGain.gain.setValueAtTime(0.5, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+  osc.connect(oscGain);
+  oscGain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + 0.4);
+}
+
+// Launches 10 fireworks spread across 3 seconds, each at a random spot in the upper part of the screen.
+function launchFireworks(){
+  const canvas = ensureFireworksCanvas();
+  if(!canvas) return;
+  const total = 10;
+  const duration = 3000;
+  for(let i = 0; i < total; i++){
+    const delay = (duration / total) * i + Math.random() * 100;
+    setTimeout(() => {
+      const x = window.innerWidth * (0.15 + Math.random() * 0.7);
+      const y = window.innerHeight * (0.15 + Math.random() * 0.35);
+      explodeFirework(x, y);
+    }, delay);
   }
 }
 
@@ -1933,7 +2013,7 @@ function recalc(){
     if(!state.prevGroupTotals) state.prevGroupTotals = {};
     const prevGroupTotal = state.prevGroupTotals[gi] || 0;
     if(prevGroupTotal < 10 && groupTotal >= 10){
-      spawnPetals();
+      launchFireworks();
     }
     state.prevGroupTotals[gi] = groupTotal;
     total += groupTotal;
