@@ -3988,6 +3988,18 @@ document.getElementById('shareImageBtn').addEventListener('click', async () => {
         return;
       }catch(err){ /* user cancelled share sheet, fall back to download below */ }
     }
+    if(window.claude && window.claude.use){
+      const downloads = await window.claude.use('downloads').catch(() => null);
+      if(downloads){
+        try{
+          await downloads.save({ filename: 'kantei-result.png', data: blob });
+          const original = btnText.textContent;
+          btnText.textContent = lang === 'en' ? 'Saved!' : '保存しました！';
+          setTimeout(() => { btnText.textContent = original; }, 3500);
+        }catch(err){ /* viewer declined or save unavailable */ }
+        return;
+      }
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
