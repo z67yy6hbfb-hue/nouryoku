@@ -1,0 +1,20 @@
+{
+  "name": "能力鑑定団",
+  "short_name": "鑑定団",
+  "description": "入力項目から総合鑑定額を算出する能力鑑定アプリ",
+  "lang": "ja",
+  "start_url": "./能力鑑定団 v16.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f0de",
+  "theme_color": "#a53a35",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,8 +2,19 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>能力鑑定団</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="能力鑑定団">
+<meta name="theme-color" content="#a53a35">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Kaisei+Decol:wght@500;700&family=Zen+Maru+Gothic:wght@500;700;900&family=Klee+One:wght@600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -472,6 +483,13 @@
   .emergency-row{
     display:flex; flex-direction:column; gap:8px; padding:10px 0 4px;
   }
+  .backup-row{
+    display:flex; flex-direction:column; gap:8px;
+    padding:12px 4px 6px; border-top:1px solid var(--line-soft); margin-top:6px;
+  }
+  .backup-btns{display:flex; flex-wrap:wrap; gap:6px;}
+  .backup-danger{color:var(--red); border-color:var(--red);}
+  .backup-status{font-size:10.5px; color:var(--gold-deep); min-height:13px;}
   .emergency-btn{
     padding:8px; border:1.5px solid var(--red); border-radius:6px; background:transparent;
     color:var(--red); font-size:12px; font-weight:700; cursor:pointer;
@@ -742,6 +760,16 @@
           <span class="settings-label" id="statsLabelEl">閲覧統計</span>
           <span class="stats-value" id="statsValue">…</span>
         </div>
+        <div class="backup-row" id="backupRow">
+          <span class="settings-label" id="backupLabelEl">データのバックアップ</span>
+          <div class="backup-btns">
+            <button class="lang-btn" id="exportDataBtn">エクスポート</button>
+            <button class="lang-btn" id="importDataBtn">インポート</button>
+            <button class="lang-btn backup-danger" id="wipeDataBtn">この端末の保存を削除</button>
+          </div>
+          <input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
+          <div class="backup-status" id="backupStatus"></div>
+        </div>
         <div class="emergency-row">
           <div class="threshold-row">
             <span id="thresholdLabelEl">自動停止の基準(1日あたり)</span>
@@ -872,6 +900,31 @@
 <canvas id="fireworksCanvas"></canvas>
 
 <script>
+/* --- ストレージ互換シム ---------------------------------------------------
+   このアプリは元々 Claude Artifact 上の window.storage (KV API) 前提で作られている。
+   GitHub Pages などブラウザで直接開いたときは window.storage が無いので、
+   同じ API 形状の localStorage 実装を差し込む。
+   - Claude Artifact 内では本物の window.storage が既に存在するのでこのシムは無効。
+   - 第3引数 shared(共有フラグ) は無視 = すべてこの端末のみに保存。 */
+if (typeof window.storage === 'undefined') {
+  window.__kanteiLocalMode = true;
+  const P = 'kantei:';
+  window.storage = {
+    async get(key){ const v = localStorage.getItem(P + key); return v === null ? null : { value: v }; },
+    async set(key, value){ localStorage.setItem(P + key, String(value)); },
+    async list(prefix){
+      const q = P + (prefix || '');
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (k && k.indexOf(q) === 0) keys.push(k.slice(P.length));
+      }
+      return { keys };
+    },
+    async delete(key){ localStorage.removeItem(P + key); },
+  };
+}
+
 let lang = 'ja';
 
 const UI_TEXT = {
@@ -896,6 +949,7 @@ const UI_TEXT = {
   rankTitle: { ja:'鑑定ランキング', en:'Appraisal Ranking' },
   rankSubtitle: { ja:'これまで鑑定された人々の総合鑑定額ランキング', en:'Ranking of everyone appraised so far, by total value' },
   rankNote: { ja:'※このランキングはこのアプリを使った全員に共有表示されます', en:'*This ranking is shared with everyone using this app' },
+  rankNoteLocal: { ja:'※このアプリ版ではこの端末で鑑定した記録のみが表示されます', en:'*In this app version only records appraised on this device are shown' },
   backToCert: { ja:'← 鑑定書に戻る', en:'← Back to appraisal' },
   toTitles: { ja:'称号ページを見る', en:'View titles page' },
   titlesTitle: { ja:'称号', en:'Titles' },
@@ -942,6 +996,15 @@ const UI_TEXT = {
   coefLabel2: { ja:'係数', en:'Coef' },
   statsLabel: { ja:'閲覧統計', en:'View stats' },
   thresholdLabel: { ja:'自動停止の基準(1日あたり)', en:'Auto-pause threshold (per day)' },
+  backupLabel: { ja:'データのバックアップ', en:'Data backup' },
+  exportData: { ja:'エクスポート', en:'Export' },
+  importData: { ja:'インポート', en:'Import' },
+  wipeData: { ja:'この端末の保存を削除', en:'Wipe this device' },
+  backupExported: { ja:'バックアップを書き出しました', en:'Backup exported' },
+  backupImported: { ja:'バックアップを読み込みました', en:'Backup imported' },
+  backupImportFail: { ja:'読み込みに失敗しました', en:'Import failed' },
+  backupWiped: { ja:'この端末の保存データを削除しました', en:'This device\'s saved data was deleted' },
+  wipeConfirm: { ja:'この端末に保存されている鑑定データをすべて削除します。取り消せません。よろしいですか？', en:'Delete all appraisal data saved on this device? This cannot be undone.' },
   emergencyLock: { ja:'今すぐ一時停止する', en:'Pause now' },
   lockTitle: { ja:'一時停止中', en:'Temporarily Paused' },
   lockMessage: { ja:'アクセスが集中したため、安全のため一時的に停止しています。解除コードをお持ちの方は下から解除できます。', en:'Access spiked, so this page has been temporarily paused for safety. Enter the unlock code below if you have one.' },
@@ -3736,6 +3799,10 @@ function applyStaticTranslations(){
   document.getElementById('addAllModeLabelEl').textContent = t('addAllModeLabel');
   document.getElementById('statsLabelEl').textContent = t('statsLabel');
   document.getElementById('thresholdLabelEl').textContent = t('thresholdLabel');
+  document.getElementById('backupLabelEl').textContent = t('backupLabel');
+  document.getElementById('exportDataBtn').textContent = t('exportData');
+  document.getElementById('importDataBtn').textContent = t('importData');
+  document.getElementById('wipeDataBtn').textContent = t('wipeData');
   document.getElementById('emergencyLockText').textContent = t('emergencyLock');
   document.getElementById('lockTitle').textContent = t('lockTitle');
   document.getElementById('lockMessage').textContent = t('lockMessage');
@@ -3743,7 +3810,7 @@ function applyStaticTranslations(){
   document.getElementById('unlockPin').placeholder = t('unlockPinPlaceholder');
   document.getElementById('rankTitleEl').textContent = t('rankTitle');
   document.getElementById('rankSubtitleEl').textContent = t('rankSubtitle');
-  document.getElementById('rankNoteEl').textContent = t('rankNote');
+  document.getElementById('rankNoteEl').textContent = window.__kanteiLocalMode ? t('rankNoteLocal') : t('rankNote');
   document.getElementById('backBtn').textContent = t('backToCert');
   document.getElementById('toTitlesText').textContent = t('toTitles');
   document.getElementById('titlesTitleEl').textContent = t('titlesTitle');
@@ -3827,6 +3894,7 @@ function initSettingsUI(){
     const val = parseInt(document.getElementById('thresholdInput').value, 10) || DEFAULT_THRESHOLD;
     try{ await window.storage.set(THRESHOLD_KEY, String(val), true); }catch(e){ /* ignore */ }
   });
+  initBackupUI();
   document.getElementById('unlockBtn').addEventListener('click', async () => {
     const pin = document.getElementById('unlockPin').value;
     const statusEl = document.getElementById('unlockStatus');
@@ -3837,6 +3905,107 @@ function initSettingsUI(){
       statusEl.textContent = lang === 'en' ? 'Incorrect code' : 'コードが違います';
     }
   });
+}
+
+/* --- データのバックアップ (localStorage の kantei: キーを丸ごと JSON 化) --- */
+const BACKUP_PREFIX = 'kantei:';
+
+function collectBackup(){
+  const data = {};
+  for(let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf(BACKUP_PREFIX) === 0) data[k.slice(BACKUP_PREFIX.length)] = localStorage.getItem(k);
+  }
+  return { app: 'nouryoku-kanteidan', version: 1, exportedAt: new Date().toISOString(), data: data };
+}
+
+function backupStatus(msg){
+  const el = document.getElementById('backupStatus');
+  if(!el) return;
+  el.textContent = msg;
+  clearTimeout(backupStatus._t);
+  backupStatus._t = setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+function downloadBlobFallback(text, filename){
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function exportBackup(){
+  const text = JSON.stringify(collectBackup(), null, 2);
+  const filename = 'kantei-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  if(typeof File !== 'undefined' && navigator.share && navigator.canShare){
+    const file = new File([text], filename, { type: 'application/json' });
+    if(navigator.canShare({ files: [file] })){
+      try{ await navigator.share({ files: [file], title: filename }); backupStatus(t('backupExported')); return; }
+      catch(err){ /* キャンセルされたら下のフォールバックへ */ }
+    }
+  }
+  if(window.claude && window.claude.use){
+    const downloads = await window.claude.use('downloads').catch(() => null);
+    if(downloads){
+      try{ await downloads.save({ filename: filename, data: text }); backupStatus(t('backupExported')); return; }
+      catch(err){ /* 拒否されたら下へ */ }
+    }
+  }
+  downloadBlobFallback(text, filename);
+  backupStatus(t('backupExported'));
+}
+
+function importBackup(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try{ parsed = JSON.parse(reader.result); }catch(e){ backupStatus(t('backupImportFail')); return; }
+    const data = parsed && parsed.data;
+    if(!data || typeof data !== 'object'){ backupStatus(t('backupImportFail')); return; }
+    Object.keys(data).forEach(k => {
+      try{ localStorage.setItem(BACKUP_PREFIX + k, String(data[k])); }catch(e){ /* 容量超過などは無視 */ }
+    });
+    backupStatus(t('backupImported'));
+    setTimeout(() => location.reload(), 700);
+  };
+  reader.onerror = () => backupStatus(t('backupImportFail'));
+  reader.readAsText(file);
+}
+
+async function wipeBackup(){
+  const ok = await customConfirm(t('wipeConfirm'));
+  if(!ok) return;
+  const doomed = [];
+  for(let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf(BACKUP_PREFIX) === 0) doomed.push(k);
+  }
+  doomed.forEach(k => localStorage.removeItem(k));
+  backupStatus(t('backupWiped'));
+  setTimeout(() => location.reload(), 700);
+}
+
+function initBackupUI(){
+  const row = document.getElementById('backupRow');
+  // 端末ローカル保存 (localStorage シム) のときだけ意味があるので、それ以外では隠す
+  if(!window.__kanteiLocalMode){ if(row) row.style.display = 'none'; return; }
+  // 言語切り替え前 (初期ロード) でもランキング注記を端末ローカル用に差し替える
+  const noteEl = document.getElementById('rankNoteEl');
+  if(noteEl) noteEl.textContent = t('rankNoteLocal');
+  document.getElementById('exportDataBtn').addEventListener('click', exportBackup);
+  const fileInput = document.getElementById('importFileInput');
+  document.getElementById('importDataBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if(f) importBackup(f);
+    fileInput.value = '';
+  });
+  document.getElementById('wipeDataBtn').addEventListener('click', wipeBackup);
 }
 
 async function getThreshold(){
