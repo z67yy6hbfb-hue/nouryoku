@@ -746,7 +746,7 @@
         </div>
         <div class="settings-row">
           <span class="settings-label" id="coefFixedLabelEl">係数モード</span>
-          <button class="lang-btn" id="coefFixedToggleBtn">OFF</button>
+          <button class="lang-btn active" id="coefFixedToggleBtn">ON</button>
         </div>
         <div class="settings-row">
           <span class="settings-label" id="coefModeLabelEl">変動係数モード</span>
@@ -4216,13 +4216,14 @@ let profiles = [makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile(), make
 let activeProfile = 0;
 let participantCount = 1;
 let variableCoefMode = false;
-let coefMode = false;
+let coefMode = true;
 let addAllMode = false;
 state = profiles[0];
 safeRun(applyCoefModeToEntries, 'applyCoefModeToEntries');
 safeRun(syncAllCoefAreas, 'syncAllCoefAreas');
 safeRun(initParticipantUI, 'initParticipantUI');
 safeRun(initSettingsUI, 'initSettingsUI');
+safeRun(updateCoefToggleUI, 'updateCoefToggleUI');
 safeRun(initChart, 'initChart');
 safeRun(setDate, 'setDate');
 safeRun(recalc, 'recalc');
