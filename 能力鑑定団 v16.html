@@ -1036,9 +1036,9 @@ const NAME_EN = {
   'ストリートファイター':'Street Fighter','エーペックス':'Apex Legends','荒野行動':'Knives Out',
   'モンスターハンター':'Monster Hunter','ゼルダの伝説':'The Legend of Zelda','どうぶつの森':'Animal Crossing',
   '国語':'Japanese Language','数学':'Mathematics','英語':'English','物理':'Physics','化学':'Chemistry',
-  '生物':'Biology','地学':'Earth Science','日本史・世界史':'Japanese & World History','地理':'Geography',
+  '生物・地学':'Biology & Earth Science','日本史・世界史':'Japanese & World History','地理':'Geography',
   '公民':'Civics','公共':'Public Civics','倫理':'Ethics','政治経済':'Politics & Economics',
-  '物理基礎':'Basic Physics','化学基礎':'Basic Chemistry','生物基礎':'Basic Biology','地学基礎':'Basic Earth Science',
+  '物理基礎':'Basic Physics','化学基礎':'Basic Chemistry','基礎科目':'Basic Subject','応用科目':'Applied Subject',
   '歴史総合':'Integrated History','日本史探究（日本史B）':'Japanese History Inquiry','世界史探究（世界史B）':'World History Inquiry',
   '地理総合（地理A）':'Integrated Geography','地理探究（地理B）':'Geography Inquiry',
   '数学ⅠA':'Math I・A','数学ⅡBC':'Math II・B・C',
@@ -1076,6 +1076,10 @@ const LEVELS = [
   {key:'special', label:'特', sub:'上', value:6.0},
   {key:'extreme', label:'極', value:10.0},
 ];
+const NO_COEF_LEVELS = new Set(['advanced', 'special', 'extreme']);
+function entryScore(e, lvlVal){
+  return NO_COEF_LEVELS.has(e.level) ? lvlVal : (e.coef || 0) * lvlVal;
+}
 const LEVEL_DESC = {
   beginner: '初級者(×0.5)：始めたばかり／基礎を学習中',
   intermediate: '中級者(×1.0)：一人で問題なくこなせる',
@@ -1105,13 +1109,9 @@ const GROUPS = [
       {n:'化学基礎',c:0.25,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの基礎科目で4割",i:"共通テストの基礎科目で6割",ia:"共通テストの基礎科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
       {n:'化学',c:0.65,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの応用科目で4割",i:"共通テストの応用科目で6割",ia:"共通テストの応用科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
     ]},
-    {name:'生物', subs:[
-      {n:'生物基礎',c:0.25,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの基礎科目で4割",i:"共通テストの基礎科目で6割",ia:"共通テストの基礎科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
-      {n:'生物',c:0.65,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの応用科目で4割",i:"共通テストの応用科目で6割",ia:"共通テストの応用科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
-    ]},
-    {name:'地学', subs:[
-      {n:'地学基礎',c:0.20,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの基礎科目で4割",i:"共通テストの基礎科目で6割",ia:"共通テストの基礎科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
-      {n:'地学',c:0.55,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの応用科目で4割",i:"共通テストの応用科目で6割",ia:"共通テストの応用科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
+    {name:'生物・地学', subs:[
+      {n:'基礎科目',c:0.20,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの基礎科目で4割",i:"共通テストの基礎科目で6割",ia:"共通テストの基礎科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
+      {n:'応用科目',c:0.55,d:{r:"義務教育を完了した",b:"中学の理科の席次で上位30%以内に入ったことがある",bi:"共通テストの応用科目で4割",i:"共通テストの応用科目で6割",ia:"共通テストの応用科目で8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
     ]},
     {name:'日本史・世界史', subs:[
       {n:'歴史総合',c:0.35,d:{r:"義務教育を完了した",b:"中学の社会の席次で上位30%以内に入ったことがある",bi:"共通テストで4割",i:"共通テストで6割",ia:"共通テストで8割",a:"大学の専攻で評価される卒論を書いた",s:"修士を卒業した大学院生",m:"有名大学の教授"}},
@@ -2067,7 +2067,7 @@ function recalc(){
           const id = `g${gi}i${ii}s${si}`;
           const e = state.entries[id];
           const lvlVal = LEVELS.find(l => l.key === e.level).value;
-          const score = (e.coef || 0) * lvlVal;
+          const score = entryScore(e, lvlVal);
           const scoreEl = document.getElementById('score-'+id);
           if(scoreEl) scoreEl.textContent = score.toFixed(1);
           return { score, baseline: (e.coef || 0) * midVal };
@@ -2078,7 +2078,7 @@ function recalc(){
         const id = `g${gi}i${ii}`;
         const e = state.entries[id];
         const lvlVal = LEVELS.find(l => l.key === e.level).value;
-        itemScore = (e.coef || 0) * lvlVal;
+        itemScore = entryScore(e, lvlVal);
         baselineItemScore = (e.coef || 0) * midVal;
         const scoreEl = document.getElementById('score-'+id);
         if(scoreEl) scoreEl.textContent = itemScore.toFixed(1);
@@ -2223,7 +2223,7 @@ function groupTotalsForProfile(p){
           const e = p.entries[id];
           if(!e) return 0;
           const lvlVal = LEVELS.find(l => l.key === e.level).value;
-          return (e.coef || 0) * lvlVal;
+          return entryScore(e, lvlVal);
         });
         itemScore = addAllMode ? subScores.reduce((a,b) => a+b, 0) : Math.max(...subScores);
       } else {
@@ -2232,7 +2232,7 @@ function groupTotalsForProfile(p){
         if(!e){ itemScore = 0; }
         else {
           const lvlVal = LEVELS.find(l => l.key === e.level).value;
-          itemScore = (e.coef || 0) * lvlVal;
+          itemScore = entryScore(e, lvlVal);
         }
       }
       groupTotal += itemScore;
