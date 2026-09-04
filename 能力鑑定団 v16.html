@@ -1545,7 +1545,7 @@ function syncCoefArea(row){
       area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×${parseFloat(originalAttr).toFixed(1)}</span>`;
     }
   } else {
-    area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×1.0</span>`;
+    area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×${(isFree ? 1.0 : parseFloat(originalAttr)).toFixed(1)}</span>`;
   }
 }
 
@@ -1562,10 +1562,8 @@ function applyCoefModeToEntries(){
       const originalVal = (area && !isFree) ? parseFloat(area.dataset.original) : 1.0;
       if(variableCoefMode){
         p.entries[id].coef = 3.0;
-      } else if(coefMode){
-        p.entries[id].coef = isFree ? 1.0 : originalVal;
       } else {
-        p.entries[id].coef = 1.0;
+        p.entries[id].coef = isFree ? 1.0 : originalVal;
       }
     });
   });
