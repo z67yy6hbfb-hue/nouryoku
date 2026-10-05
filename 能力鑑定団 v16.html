@@ -242,7 +242,7 @@
     color:var(--gc);
   }
   .group-meta{font-size:12px; color:var(--ink); text-align:right; white-space:nowrap;}
-  .group-meta .subtotal{color:var(--gc); font-weight:800; font-size:17px;}
+  .group-meta .subtotal{color:var(--ink); font-weight:800; font-size:17px;}
   .toggle{font-size:12px; color:var(--gc); transition:transform .2s ease; margin-left:4px;}
   .group.open .toggle{transform:rotate(180deg);}
 
@@ -561,6 +561,24 @@
   }
   .title-tag .title-icon{ font-size:12px; padding:0; }
   .title-tag.title-tag-none{background:transparent; border:1px dashed var(--line); color:var(--ink-soft); font-weight:500;}
+  .title-stack{position:relative; display:inline-flex; align-items:center;}
+  .title-tags .title-stack{margin:2px 2px 2px 0;}
+  .title-tag-ghost{position:absolute; top:0; left:0; pointer-events:none; filter:saturate(0.55) brightness(0.85); white-space:nowrap;}
+  .title-tag-tip{position:relative;}
+  .title-tag-dimmed{background:#b7b0a0 !important; color:#6f6858 !important; border-color:transparent !important; box-shadow:none !important; filter:grayscale(1); opacity:0.55;}
+  .title-legend{
+    position:sticky; top:0; z-index:6; background:var(--paper);
+    display:flex; flex-wrap:wrap; gap:6px; padding:8px 0; margin-bottom:6px;
+    border-bottom:1px solid var(--line);
+  }
+  .title-legend-chip{
+    display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:12px;
+    color:#fff; border:2px solid transparent; cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
+    transition:opacity .15s ease, transform .1s ease;
+  }
+  .title-legend-chip.selected{border-color:var(--ink); box-shadow:0 0 0 1.5px #fff inset;}
+  .title-legend-chip.dimmed{opacity:0.4;}
+  .title-legend-chip:active{transform:scale(0.96);}
   .rank-date{font-size:10px; color:var(--ink-soft); margin-top:2px;}
   .rank-amount{font-size:15px; font-weight:800; color:var(--red-deep); white-space:nowrap; font-variant-numeric:tabular-nums;}
   .rank-empty{text-align:center; color:var(--ink-soft); font-size:13px; padding:30px 10px;}
@@ -814,6 +832,8 @@
     <div class="rank-mode-tabs" id="titlesTabs"></div>
 
     <div class="catalog-sort-tabs" id="catalogSortTabs"></div>
+
+    <div class="title-legend" id="titleLegend"></div>
 
     <div id="titlesList" class="ranking-list"></div>
 
@@ -1084,6 +1104,7 @@ const LEVEL_DESC = {
 };
 const KNUM = ['1','2','3','4','5','6','7'];
 const GROUP_COLORS = ['#e0693f','#8b5cf6','#2f7dd1','#e2447f','#12977a','#e0932b','#d1394a'];
+const RANKING_DISPLAY_LIMIT = 50;
 const MULT_OPTIONS = [0.5, 1, 1.5, 2, 2.5, 3];
 
 const GROUPS = [
@@ -2866,6 +2887,21 @@ function titleTagGradient(category){
   const c = titleCategoryColor(category);
   return `linear-gradient(135deg, ${c}, ${shadeColor(c, -22)})`;
 }
+const RARITY_METAL_GRADIENTS = {
+  5: 'linear-gradient(135deg, #fff6d2 0%, #f4c542 45%, #b9800a 100%)',
+  4: 'linear-gradient(135deg, #f6f7f9 0%, #c3c7cc 45%, #868b90 100%)',
+  3: 'linear-gradient(135deg, #ecc492 0%, #cd7f32 45%, #7c4414 100%)',
+};
+function titleTagFill(rarity, category){
+  return RARITY_METAL_GRADIENTS[rarity] || titleTagGradient(category);
+}
+function titleTagBorderStyle(category){
+  const c = titleCategoryColor(category);
+  return `border:4px solid ${c}; box-shadow:0 0 5px ${c}99;`;
+}
+function titleTagTextColor(rarity){
+  return RARITY_METAL_GRADIENTS[rarity] ? '#3a2f12' : '#fff';
+}
 const LEVEL_ORDER = LEVELS.map(l => l.key);
 
 function groupLeafItems(groupIndex){
@@ -3418,7 +3454,7 @@ const TITLE_RULES = [
     id: 'tasai',
     label: { ja:'🎖️ 多才', en:'🎖️ Multi-Talented' },
     desc: { ja:'器用貧乏の条件を満たし、かつ「初中級者」以上が30個以上・「中級者」以上が15個以上・「中上級者」以上が5個以上・「上級者」以上が1個以上', en:'Meets the Jack of All Trades condition, with 30+ items at Beginner-Intermediate or higher, 15+ at Intermediate or higher, 5+ at Inter-Advanced or higher, and 1+ at Advanced or higher' },
-    category: 'score', rarity: 4, conditional: true,
+    category: 'score', rarity: 4, conditional: true, evolvesFrom: 'kiyobinbo',
     test: (entry) => totalItemsAtLeastAcrossAll(entry, 'beginner') >= 50
       && totalItemsAtLeastAcrossAll(entry, 'beginner_inter') >= 30
       && totalItemsAtLeastAcrossAll(entry, 'intermediate') >= 15
@@ -3429,7 +3465,7 @@ const TITLE_RULES = [
     id: 'bannou',
     label: { ja:'🎖️ 万能', en:'🎖️ Omni-Talent' },
     desc: { ja:'多才の条件を満たし、かつ「中級者」以上が20個以上・「中上級者」以上が10個以上・「上級者」以上が5個以上・「特上級者」以上が1個以上', en:'Meets the Multi-Talented condition, with 20+ items at Intermediate or higher, 10+ at Inter-Advanced or higher, 5+ at Advanced or higher, and 1+ at Superior or higher' },
-    category: 'score', rarity: 5, conditional: true,
+    category: 'score', rarity: 5, conditional: true, evolvesFrom: 'tasai',
     test: (entry) => totalItemsAtLeastAcrossAll(entry, 'beginner') >= 50
       && totalItemsAtLeastAcrossAll(entry, 'beginner_inter') >= 30
       && totalItemsAtLeastAcrossAll(entry, 'intermediate') >= 20
@@ -3474,8 +3510,97 @@ function titleTagPillHTML(r){
   const desc = (r.desc && (r.desc[lang] || r.desc.ja)) || comboDescFor(r) || (lang === 'en' ? 'Condition not set yet' : '条件未設定');
   const stars = r.rarity;
   const starLabel = (RARITY_INFO[stars] && RARITY_INFO[stars].label) || '';
-  const tagBg = titleTagGradient(r.category);
-  return `<span class="title-tag" style="background:${tagBg};">${starLabel ? escapeHTML(starLabel) + ' ' : ''}${escapeHTML(label)}<span class="title-icon" data-desc="${escapeHTML(desc).replace(/"/g,'&quot;')}">💬</span></span>`;
+  const tagBg = titleTagFill(stars, r.category);
+  const borderStyle = titleTagBorderStyle(r.category);
+  const textColor = titleTagTextColor(stars);
+  return `<span class="title-tag" data-cat="${r.category}" style="background:${tagBg}; ${borderStyle} color:${textColor};">${starLabel ? escapeHTML(starLabel) + ' ' : ''}${escapeHTML(label)}<span class="title-icon" data-desc="${escapeHTML(desc).replace(/"/g,'&quot;')}">💬</span></span>`;
+}
+
+const TITLE_LEGEND_CATEGORIES = ['academics', 'sports', 'arts', 'craft', 'life', 'games', 'social', 'score', 'fusion'];
+let selectedLegendCategories = new Set();
+
+function renderTitleLegend(){
+  const el = document.getElementById('titleLegend');
+  if(!el) return;
+  el.innerHTML = TITLE_LEGEND_CATEGORIES.map(cat => {
+    const color = titleCategoryColor(cat);
+    const name = (CATEGORY_INFO[cat] && (CATEGORY_INFO[cat][lang] || CATEGORY_INFO[cat].ja)) || cat;
+    const selected = selectedLegendCategories.has(cat);
+    const dimmed = selectedLegendCategories.size > 0 && !selected;
+    return `<button type="button" class="title-legend-chip${selected ? ' selected' : ''}${dimmed ? ' dimmed' : ''}" data-cat="${cat}" style="background:${color};">${escapeHTML(name)}</button>`;
+  }).join('');
+}
+
+function applyTitleCategoryFilter(){
+  const list = document.getElementById('titlesList');
+  if(!list) return;
+  const active = selectedLegendCategories.size > 0;
+  list.querySelectorAll('[data-cat]').forEach(el => {
+    const dim = active && !selectedLegendCategories.has(el.dataset.cat);
+    el.classList.toggle('title-tag-dimmed', dim);
+  });
+}
+
+document.getElementById('titleLegend').addEventListener('click', (e) => {
+  const btn = e.target.closest('.title-legend-chip');
+  if(!btn) return;
+  const cat = btn.dataset.cat;
+  if(selectedLegendCategories.has(cat)) selectedLegendCategories.delete(cat);
+  else selectedLegendCategories.add(cat);
+  renderTitleLegend();
+  applyTitleCategoryFilter();
+});
+
+function evolutionChainIds(rule){
+  const chain = [rule.id];
+  let cur = rule;
+  while(cur && cur.evolvesFrom){
+    const parent = TITLE_RULES.find(x => x.id === cur.evolvesFrom);
+    if(!parent) break;
+    chain.unshift(parent.id);
+    cur = parent;
+  }
+  return chain;
+}
+
+function evolutionStackHTML(chainRules){
+  const n = chainRules.length;
+  const tip = chainRules[n - 1];
+  const ghostsHTML = chainRules.slice(0, n - 1).map((r, idx) => {
+    const depth = n - 1 - idx; // oldest title sits furthest back
+    const offset = depth * 5;
+    const bg = titleTagGradient(r.category);
+    const borderStyle = titleTagBorderStyle(r.category);
+    const label = r.label[lang] || r.label.ja;
+    const opacity = Math.max(0.3, 0.8 - depth * 0.18);
+    return `<span class="title-tag title-tag-ghost" data-cat="${r.category}" style="background:${bg}; ${borderStyle} opacity:${opacity}; transform:translate(${offset}px, ${offset}px); z-index:${idx};">${escapeHTML(label)}</span>`;
+  }).join('');
+  const tipBg = titleTagFill(tip.rarity, tip.category);
+  const tipLabel = tip.label[lang] || tip.label.ja;
+  const starLabel = (RARITY_INFO[tip.rarity] && RARITY_INFO[tip.rarity].label) || '';
+  const chainNames = chainRules.map(r => (r.label[lang] || r.label.ja).replace(/^[^\s]+\s*/, ''));
+  const chainDesc = lang === 'en' ? `Evolved from: ${chainNames.join(' → ')}` : `進化: ${chainNames.join('→')}`;
+  const tipDesc = (tip.desc && (tip.desc[lang] || tip.desc.ja)) || '';
+  const fullDesc = tipDesc ? `${chainDesc}\n${tipDesc}` : chainDesc;
+  const reserve = (n - 1) * 5;
+  const tipBorderStyle = titleTagBorderStyle(tip.category);
+  const tipTextColor = titleTagTextColor(tip.rarity);
+  const tipHTML = `<span class="title-tag title-tag-tip" data-cat="${tip.category}" style="background:${tipBg}; ${tipBorderStyle} color:${tipTextColor}; z-index:${n};">${starLabel ? escapeHTML(starLabel) + ' ' : ''}${escapeHTML(tipLabel)}<span class="title-icon" data-desc="${escapeHTML(fullDesc).replace(/"/g,'&quot;')}">💬</span></span>`;
+  return `<span class="title-stack" style="padding-right:${reserve}px; padding-bottom:${reserve}px;">${ghostsHTML}${tipHTML}</span>`;
+}
+
+function renderConditionalPills(conditionalRules){
+  const earnedIds = new Set(conditionalRules.map(r => r.id));
+  const referencedAsParent = new Set(
+    conditionalRules.filter(r => r.evolvesFrom && earnedIds.has(r.evolvesFrom)).map(r => r.evolvesFrom)
+  );
+  return conditionalRules
+    .filter(r => !referencedAsParent.has(r.id))
+    .map(tip => {
+      const chain = evolutionChainIds(tip).filter(id => earnedIds.has(id)).map(id => TITLE_RULES.find(x => x.id === id));
+      return chain.length > 1 ? evolutionStackHTML(chain) : titleTagPillHTML(tip);
+    })
+    .join('');
 }
 
 let currentTitlesTab = 'people';
@@ -3621,7 +3746,7 @@ async function loadTitles(){
         ? `<div class="title-tags"><span class="title-tag title-tag-none">${lang === 'en' ? 'No title yet' : '称号なし'}</span></div>`
         : [
             singleRules.length ? `<div class="title-tags title-tags-single">${singleRules.map(titleTagPillHTML).join('')}</div>` : '',
-            conditionalRules.length ? `<div class="title-tags title-tags-conditional">${conditionalRules.map(titleTagPillHTML).join('')}</div>` : '',
+            conditionalRules.length ? `<div class="title-tags title-tags-conditional">${renderConditionalPills(conditionalRules)}</div>` : '',
           ].join('');
       const row = document.createElement('div');
       row.className = 'rank-row';
@@ -3636,6 +3761,7 @@ async function loadTitles(){
       `;
       listEl.appendChild(row);
     });
+    applyTitleCategoryFilter();
   }catch(err){
     console.warn('loadTitles error:', err);
     const detail = (err && err.message) ? err.message : String(err);
@@ -3660,7 +3786,7 @@ function renderRankingList(mode){
   }
 
   if(currentRankMainMode === 'variable'){
-    const byDate = filtered.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const byDate = filtered.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, RANKING_DISPLAY_LIMIT);
     listEl.innerHTML = '';
     byDate.forEach(entry => {
       const row = document.createElement('div');
@@ -3685,7 +3811,7 @@ function renderRankingList(mode){
     const av = isTotal ? (a.total || 0) : ((a.groupTotals && a.groupTotals[gi]) || 0);
     const bv = isTotal ? (b.total || 0) : ((b.groupTotals && b.groupTotals[gi]) || 0);
     return bv - av;
-  });
+  }).slice(0, RANKING_DISPLAY_LIMIT);
   const top3ModeKey = currentRankMainMode + ':' + mode;
   const newTop3 = sorted.slice(0, 3).map(e => e.key);
   const prevTop3 = lastTop3ByMode[top3ModeKey] || [];
@@ -4336,6 +4462,7 @@ function showPage(pageName){
   if(pageName === 'rank') loadRanking();
   if(pageName === 'titles'){
     renderTitlesTabs();
+    renderTitleLegend();
     if(currentTitlesTab === 'catalog'){ renderTitleCatalog(); } else { loadTitles(); }
   }
   if(pageName === 'compare') loadCompare();
