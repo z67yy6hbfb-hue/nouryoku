@@ -899,6 +899,19 @@
   </div>
 </div>
 
+<div class="doc" id="pageFriends" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Friends</div>
+    <h1 id="friendsTitleEl">フレンド</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="friendsSubtitleEl">フレンドの自己評価・他己評価を管理します</div>
+
+    <div id="friendsPageRoot"></div>
+  </div>
+</div>
+
 <nav class="bottom-nav" id="bottomNav">
   <button class="bottom-nav-btn" data-page="cert" id="navHomeBtn">
     <span class="bn-icon">🏠</span><span class="bn-label" id="navHomeLabel">ホーム</span>
@@ -917,6 +930,9 @@
   </button>
   <button class="bottom-nav-btn" data-page="data" id="navDataBtn">
     <span class="bn-icon">📊</span><span class="bn-label" id="navDataLabel">データ</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="friends" id="navFriendsBtn">
+    <span class="bn-icon">👥</span><span class="bn-label" id="navFriendsLabel">フレンド</span>
   </button>
 </nav>
 
@@ -1047,6 +1063,8 @@ if(firebaseAuth){
     updateAccountUI();
     if(user){
       try{ await loadState(); }catch(err){ console.warn('loadState after sign-in failed:', err); }
+      try{ await ensureEmailIndex(user); }catch(err){ console.warn('ensureEmailIndex failed:', err); }
+      try{ await loadMyProfileAttributes(); }catch(err){ console.warn('loadMyProfileAttributes failed:', err); }
     }
   });
 }
@@ -1147,6 +1165,568 @@ const UI_TEXT = {
   confirmCancel: { ja:'キャンセル', en:'Cancel' },
 };
 function t(key){ return (UI_TEXT[key] && UI_TEXT[key][lang]) || key; }
+
+/* =========================================================================
+   フレンド機能 / 他己評価 / セグメント分析
+   Firestore (firebaseDb) を直接利用。未ログイン時はフレンドページ側で
+   ログインを促すのみで、既存のローカル/leaderboard機能には影響しない。
+   ========================================================================= */
+
+const PROFILE_FIELDS = {
+  ageGroup: { label:'年代', options:[
+    {v:'teens_late', l:'10代後半'}, {v:'20s_early', l:'20代前半'}, {v:'20s_late', l:'20代後半'},
+    {v:'30s_early', l:'30代前半'}, {v:'30s_late', l:'30代後半'}, {v:'40s', l:'40代'}, {v:'50s_plus', l:'50代以上'},
+  ]},
+  gender: { label:'性別', options:[
+    {v:'male', l:'男性'}, {v:'female', l:'女性'}, {v:'other', l:'その他'}, {v:'undisclosed', l:'回答しない'},
+  ]},
+  loveType: { label:'恋愛タイプ', options:[
+    {v:'passionate', l:'熱愛型'}, {v:'stable', l:'安定型'}, {v:'shy', l:'奥手型'}, {v:'free', l:'自由型'}, {v:'devoted', l:'一途型'},
+  ]},
+  birthOrder: { label:'生まれ順', options:[
+    {v:'first', l:'長子'}, {v:'middle', l:'中間子'}, {v:'last', l:'末っ子'}, {v:'only', l:'一人っ子'},
+  ]},
+  educationCategory: { label:'学歴', options:[
+    {v:'science_grad', l:'理系大卒'}, {v:'humanities_grad', l:'文系大卒'}, {v:'vocational', l:'高専・専門卒'}, {v:'high_school', l:'高卒'}, {v:'other_edu', l:'その他'},
+  ]},
+  careerField: { label:'職種', options:[
+    {v:'engineer', l:'エンジニア'}, {v:'medical', l:'医療・福祉'}, {v:'education', l:'教育'}, {v:'sales', l:'営業・販売'},
+    {v:'creative', l:'クリエイティブ'}, {v:'public_service', l:'公務員'}, {v:'management', l:'経営・管理'}, {v:'student', l:'学生'}, {v:'other_job', l:'その他'},
+  ]},
+};
+const MBTI_AXES = [
+  { key:'EI', label:'外向(E) / 内向(I)', options:[{v:'E',l:'外向 E'},{v:'I',l:'内向 I'}] },
+  { key:'SN', label:'感覚(S) / 直観(N)', options:[{v:'S',l:'感覚 S'},{v:'N',l:'直観 N'}] },
+  { key:'TF', label:'思考(T) / 感情(F)', options:[{v:'T',l:'思考 T'},{v:'F',l:'感情 F'}] },
+  { key:'JP', label:'判断(J) / 探索(P)', options:[{v:'J',l:'判断 J'},{v:'P',l:'探索 P'}] },
+];
+const ACTIVITY_CATEGORY_OPTIONS = [
+  {v:'sports_team', l:'運動部(体育会系)'}, {v:'arts_music', l:'芸術・音楽系'}, {v:'culture_academic', l:'文化部・学術系'},
+  {v:'outdoor', l:'アウトドア'}, {v:'gaming_esports', l:'ゲーム・eスポーツ'}, {v:'volunteer', l:'ボランティア・社会活動'},
+];
+const SEGMENT_OPTIONS = [
+  {v:'sports_club', l:'運動部出身'}, {v:'arts_music', l:'芸術・音楽系'},
+  {v:'mbti_t', l:'MBTI思考型(T)'}, {v:'mbti_f', l:'MBTI感情型(F)'},
+  {v:'science_grad', l:'理系大卒'}, {v:'humanities_grad', l:'文系大卒'},
+];
+const SEGMENT_PREDICATES = {
+  sports_club: attrs => (attrs.activityCategories || []).includes('sports_team'),
+  arts_music: attrs => (attrs.activityCategories || []).includes('arts_music'),
+  mbti_t: attrs => attrs.mbti && attrs.mbti.TF === 'T',
+  mbti_f: attrs => attrs.mbti && attrs.mbti.TF === 'F',
+  science_grad: attrs => attrs.educationCategory === 'science_grad',
+  humanities_grad: attrs => attrs.educationCategory === 'humanities_grad',
+};
+const K_ANON_THRESHOLD = 2; // この人数以下は内訳を隠し、平均値のみ表示する
+
+function emailIndexId(email){ return (email || '').trim().toLowerCase().replace(/[^a-z0-9@._-]/g, ''); }
+
+async function ensureEmailIndex(user){
+  if(!firebaseDb || !user || !user.email) return;
+  await firebaseDb.collection('emailIndex').doc(emailIndexId(user.email)).set({ uid: user.uid }, { merge: true });
+}
+
+/* --- プロフィール属性(タップ選択式) --- */
+let myProfileAttrs = null;
+
+function profilePublicRef(uid){ return firebaseDb.collection('users').doc(uid).collection('public').doc('profile'); }
+
+async function loadMyProfileAttributes(){
+  if(!firebaseDb || !firebaseUser) return;
+  const snap = await profilePublicRef(firebaseUser.uid).get();
+  const data = snap.exists ? snap.data() : {};
+  myProfileAttrs = Object.assign({
+    nickname: '', ageGroup: null, gender: null, mbti: { EI:null, SN:null, TF:null, JP:null },
+    loveType: null, birthOrder: null, educationCategory: null, careerField: null, activityCategories: [],
+  }, data);
+  if(!myProfileAttrs.mbti) myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
+  if(!myProfileAttrs.activityCategories) myProfileAttrs.activityCategories = [];
+}
+
+async function saveMyProfileAttributes(){
+  if(!firebaseDb || !firebaseUser || !myProfileAttrs) return;
+  const mbtiType = ['EI','SN','TF','JP'].map(k => myProfileAttrs.mbti[k] || '?').join('');
+  await profilePublicRef(firebaseUser.uid).set(
+    Object.assign({}, myProfileAttrs, { mbti: Object.assign({}, myProfileAttrs.mbti, { type: mbtiType }) }),
+    { merge: true }
+  );
+}
+
+function chipButtonsHTML(options, selectedValue){
+  return options.map(o => `<button type="button" class="lang-btn profile-chip${selectedValue === o.v ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('');
+}
+
+function renderProfileAttributesUI(){
+  const root = document.getElementById('profileAttrsContent');
+  if(!root || !myProfileAttrs) return;
+  let html = `<div class="settings-row"><span class="settings-label">ニックネーム</span>
+    <input type="text" id="nicknameInput" maxlength="20" value="${escapeHTML(myProfileAttrs.nickname || '')}" placeholder="表示名" style="flex:1; min-width:140px; padding:8px; border:1px solid var(--line); border-radius:8px;"></div>`;
+  Object.keys(PROFILE_FIELDS).forEach(fieldKey => {
+    const field = PROFILE_FIELDS[fieldKey];
+    html += `<div class="settings-row profile-field-row"><span class="settings-label">${field.label}</span>
+      <div class="profile-chip-group" data-field="${fieldKey}" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${chipButtonsHTML(field.options, myProfileAttrs[fieldKey])}</div></div>`;
+  });
+  html += `<div class="settings-row profile-field-row"><span class="settings-label">活動タグ(複数選択可)</span>
+    <div class="profile-chip-group" data-field="activityCategories" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${ACTIVITY_CATEGORY_OPTIONS.map(o => `<button type="button" class="lang-btn profile-chip${myProfileAttrs.activityCategories.includes(o.v) ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('')}</div></div>`;
+  MBTI_AXES.forEach(axis => {
+    html += `<div class="settings-row profile-field-row"><span class="settings-label">${axis.label}</span>
+      <div class="profile-chip-group" data-mbti-axis="${axis.key}" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${chipButtonsHTML(axis.options, myProfileAttrs.mbti[axis.key])}</div></div>`;
+  });
+  html += `<button class="lang-btn" id="saveProfileAttrsBtn" style="margin-top:8px;">プロフィールを保存</button><span id="profileAttrsSaveStatus" style="margin-left:8px; font-size:11px;"></span>`;
+  root.innerHTML = html;
+
+  root.querySelectorAll('.profile-chip-group[data-field]').forEach(group => {
+    const fieldKey = group.dataset.field;
+    group.querySelectorAll('.profile-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.value;
+        if(fieldKey === 'activityCategories'){
+          const arr = myProfileAttrs.activityCategories;
+          const idx = arr.indexOf(v);
+          if(idx >= 0) arr.splice(idx, 1); else arr.push(v);
+        } else {
+          myProfileAttrs[fieldKey] = (myProfileAttrs[fieldKey] === v) ? null : v;
+        }
+        renderProfileAttributesUI();
+      });
+    });
+  });
+  root.querySelectorAll('.profile-chip-group[data-mbti-axis]').forEach(group => {
+    const axisKey = group.dataset.mbtiAxis;
+    group.querySelectorAll('.profile-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.value;
+        myProfileAttrs.mbti[axisKey] = (myProfileAttrs.mbti[axisKey] === v) ? null : v;
+        renderProfileAttributesUI();
+      });
+    });
+  });
+  const nicknameInput = document.getElementById('nicknameInput');
+  if(nicknameInput) nicknameInput.addEventListener('input', () => { myProfileAttrs.nickname = nicknameInput.value; });
+  const saveBtn = document.getElementById('saveProfileAttrsBtn');
+  if(saveBtn) saveBtn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('profileAttrsSaveStatus');
+    statusEl.textContent = '保存中…';
+    try{ await saveMyProfileAttributes(); statusEl.textContent = '保存しました'; setTimeout(() => statusEl.textContent = '', 2500); }
+    catch(err){ statusEl.textContent = '保存に失敗しました'; console.warn(err); }
+  });
+}
+
+/* --- フレンド申請・承認 --- */
+function friendPairId(uidA, uidB){ return [uidA, uidB].sort().join('_'); }
+
+async function sendFriendRequestByEmail(email){
+  if(!firebaseDb || !firebaseUser) throw new Error('ログインしてください');
+  const idxSnap = await firebaseDb.collection('emailIndex').doc(emailIndexId(email)).get();
+  if(!idxSnap.exists) throw new Error('そのメールアドレスのユーザーが見つかりません');
+  const targetUid = idxSnap.data().uid;
+  if(targetUid === firebaseUser.uid) throw new Error('自分自身には申請できません');
+  const pairId = friendPairId(firebaseUser.uid, targetUid);
+  const ref = firebaseDb.collection('friendships').doc(pairId);
+  const snap = await ref.get();
+  if(snap.exists) throw new Error('既に申請済み、またはフレンドです');
+  await ref.set({
+    uids: [firebaseUser.uid, targetUid],
+    requestedBy: firebaseUser.uid,
+    requestedByEmail: firebaseUser.email || '',
+    status: 'pending',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+async function respondFriendRequest(pairId, accept){
+  const ref = firebaseDb.collection('friendships').doc(pairId);
+  if(accept){
+    await ref.update({ status: 'accepted', respondedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } else {
+    await ref.delete();
+  }
+}
+
+async function listMyFriendships(myUid){
+  const snap = await firebaseDb.collection('friendships').where('uids', 'array-contains', myUid).get();
+  return snap.docs.map(d => ({ pairId: d.id, ...d.data() }));
+}
+
+async function getFriendSetting(myUid, friendUid){
+  const snap = await firebaseDb.collection('users').doc(myUid).collection('friendSettings').doc(friendUid).get();
+  return Object.assign({ includeInRanking: true, includeTheirReviewOfMe: false }, snap.exists ? snap.data() : {});
+}
+async function setFriendSetting(myUid, friendUid, patch){
+  await firebaseDb.collection('users').doc(myUid).collection('friendSettings').doc(friendUid).set(patch, { merge: true });
+}
+
+/* --- assessments (自己鑑定/他己鑑定の実体) --- */
+function selfAssessmentDocId(uid){ return uid + '_self'; }
+function peerAssessmentDocId(uid, slotIndex){ return uid + '_peer_' + slotIndex; }
+
+async function upsertAssessment(docId, data){
+  const ref = firebaseDb.collection('assessments').doc(docId);
+  const snap = await ref.get();
+  if(snap.exists){
+    await ref.update(Object.assign({}, data, { updatedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+  } else {
+    await ref.set(Object.assign({}, data, {
+      targetUid: data.targetUid !== undefined ? data.targetUid : null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }));
+  }
+}
+
+async function syncAssessmentsToFirestore(){
+  if(!firebaseDb || !firebaseUser) return;
+  const myUid = firebaseUser.uid;
+  for(let i = 0; i < participantCount; i++){
+    const p = profiles[i];
+    if(!p.name || !p.name.trim()) continue;
+    if(hasActiveMultiplier(p)) continue;
+    const { total, totals } = (i === activeProfile) ? { total: currentTotal, totals: currentGroupTotals } : groupTotalsForProfile(p);
+    const entriesSnapshot = JSON.parse(JSON.stringify(p.entries));
+    try{
+      if(i === activeProfile){
+        await upsertAssessment(selfAssessmentDocId(myUid), {
+          authorUid: myUid, targetUid: myUid, kind: 'self', visibility: 'friends',
+          entries: entriesSnapshot, total, groupTotals: totals,
+          reviewerDisplayName: firebaseUser.displayName || firebaseUser.email || '',
+        });
+      } else {
+        await upsertAssessment(peerAssessmentDocId(myUid, i), {
+          authorUid: myUid, kind: 'peer', visibility: 'friends',
+          targetNameRaw: p.name.trim(),
+          entries: entriesSnapshot, total, groupTotals: totals,
+          reviewerAttributesSnapshot: myProfileAttrs || {},
+          reviewerDisplayName: firebaseUser.displayName || firebaseUser.email || '',
+        });
+      }
+    }catch(err){ console.warn('assessments sync failed for slot', i, err); }
+  }
+}
+
+async function fetchPeerAssessmentsAboutMe(myUid){
+  const snap = await firebaseDb.collection('assessments').where('targetUid', '==', myUid).where('kind', '==', 'peer').get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function fetchFriendsSelfAssessments(friendUids){
+  if(!friendUids.length) return [];
+  const snap = await firebaseDb.collection('assessments').where('authorUid', 'in', friendUids.slice(0, 30)).where('kind', '==', 'self').get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function listUnlinkedPeerAssessments(myUid){
+  const snap = await firebaseDb.collection('assessments').where('authorUid', '==', myUid).where('kind', '==', 'peer').where('targetUid', '==', null).get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function linkLegacyAssessmentToFriend(assessmentId, friendUid, myUid){
+  const ref = firebaseDb.collection('assessments').doc(assessmentId);
+  const snap = await ref.get();
+  if(!snap.exists) throw new Error('対象の鑑定データが見つかりません');
+  const data = snap.data();
+  if(data.authorUid !== myUid) throw new Error('自分が作成した鑑定データのみリンクできます');
+  if(data.targetUid) throw new Error('既にリンク済みです');
+  await ref.update({ targetUid: friendUid, linkedUid: friendUid, linkedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+/* --- 集計・フィルター (純粋関数) --- */
+function aggregatePeerAssessments(assessments, options){
+  const { includedReviewerUids = null, segmentKeys = [], anonymous = false } = options;
+  const filtered = assessments.filter(a => {
+    if(includedReviewerUids && !includedReviewerUids.has(a.authorUid)) return false;
+    const attrs = a.reviewerAttributesSnapshot || {};
+    return segmentKeys.every(key => (SEGMENT_PREDICATES[key] ? SEGMENT_PREDICATES[key](attrs) : true));
+  });
+  const count = filtered.length;
+  if(count === 0) return { count: 0, average: null, distribution: null, breakdown: null, lowSample: false };
+  const average = filtered.reduce((sum, a) => sum + a.total, 0) / count;
+  const lowSample = count <= K_ANON_THRESHOLD;
+  return {
+    count,
+    average,
+    distribution: lowSample ? null : buildHistogram(filtered.map(a => a.total)),
+    breakdown: lowSample ? null : filtered.map((a, i) => ({
+      reviewerUid: a.authorUid,
+      label: anonymous ? `フレンド${String.fromCharCode(65 + i)}` : (a.reviewerDisplayName || '不明'),
+      total: a.total,
+    })),
+    lowSample,
+  };
+}
+function buildHistogram(totals, binSize){
+  binSize = binSize || 10;
+  const bins = {};
+  totals.forEach(t => { const k = Math.floor(t / binSize) * binSize; bins[k] = (bins[k] || 0) + 1; });
+  return Object.keys(bins).map(Number).sort((a, b) => a - b).map(k => ({ rangeStart: k, rangeEnd: k + binSize, count: bins[k] }));
+}
+
+/* --- フレンドページ UI --- */
+let friendsPageCache = { friendships: [], accepted: [], incoming: [], friendUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {} };
+
+async function loadFriendsPage(){
+  const root = document.getElementById('friendsPageRoot');
+  if(!root) return;
+  if(!firebaseDb || !firebaseUser){
+    root.innerHTML = '<div class="rank-empty">フレンド機能を使うにはホーム画面下部の設定からGoogleでログインしてください。</div>';
+    return;
+  }
+  root.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  const myUid = firebaseUser.uid;
+  try{
+    if(!myProfileAttrs) await loadMyProfileAttributes();
+    const [friendships, peerAssessments] = await Promise.all([
+      listMyFriendships(myUid),
+      fetchPeerAssessmentsAboutMe(myUid),
+    ]);
+    const accepted = friendships.filter(f => f.status === 'accepted');
+    const incoming = friendships.filter(f => f.status === 'pending' && f.requestedBy !== myUid);
+    const friendUids = accepted.map(f => f.uids.find(u => u !== myUid));
+    const settingsEntries = await Promise.all(friendUids.map(uid => getFriendSetting(myUid, uid).then(s => [uid, s])));
+    const friendSettings = Object.fromEntries(settingsEntries);
+    const friendProfileEntries = await Promise.all(friendUids.map(uid => profilePublicRef(uid).get().then(s => [uid, s.exists ? s.data() : {}])));
+    const friendProfiles = Object.fromEntries(friendProfileEntries);
+    friendsPageCache = { friendships, accepted, incoming, friendUids, peerAssessments, friendSettings, friendProfiles };
+    renderFriendsPage();
+  }catch(err){
+    console.warn('loadFriendsPage failed:', err);
+    root.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+function renderFriendsPage(){
+  const root = document.getElementById('friendsPageRoot');
+  const { incoming } = friendsPageCache;
+  root.innerHTML = `
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">プロフィール属性（タップで選択）</div>
+      <div id="profileAttrsContent"></div>
+    </div>
+
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド申請</div>
+      <div class="account-row">
+        <input type="email" id="friendEmailInput" placeholder="フレンドのメールアドレス" style="flex:1; min-width:180px; padding:8px; border:1px solid var(--line); border-radius:8px;">
+        <button class="lang-btn" id="sendFriendRequestBtn">申請する</button>
+      </div>
+      <div id="friendRequestStatus" style="font-size:11px; margin-top:4px;"></div>
+    </div>
+
+    ${incoming.length ? `
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">受信した申請</div>
+      <div id="incomingRequestsList"></div>
+    </div>` : ''}
+
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド一覧</div>
+      <div id="friendListContent"></div>
+    </div>
+
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">フレンドの自己評価ランキング</div>
+      <div id="friendRankingContent"></div>
+    </div>
+
+    <div class="settings-block">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">自分宛ての他己評価</div>
+      <div id="peerReviewSection"></div>
+    </div>
+  `;
+
+  renderProfileAttributesUI();
+  renderIncomingRequests();
+  renderFriendList();
+  renderFriendRanking();
+  renderPeerReviewSection();
+
+  document.getElementById('sendFriendRequestBtn').addEventListener('click', async () => {
+    const input = document.getElementById('friendEmailInput');
+    const statusEl = document.getElementById('friendRequestStatus');
+    statusEl.textContent = '送信中…';
+    try{
+      await sendFriendRequestByEmail(input.value);
+      statusEl.textContent = '申請を送信しました';
+      input.value = '';
+    }catch(err){ statusEl.textContent = err.message || '送信に失敗しました'; }
+  });
+}
+
+function renderIncomingRequests(){
+  const el = document.getElementById('incomingRequestsList');
+  if(!el) return;
+  const { incoming } = friendsPageCache;
+  el.innerHTML = incoming.map(f => `
+    <div class="account-row" data-pair="${f.pairId}">
+      <span>${escapeHTML(f.requestedByEmail || '不明なユーザー')}</span>
+      <button class="lang-btn" data-action="accept">承認</button>
+      <button class="lang-btn backup-danger" data-action="reject">拒否</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-pair]').forEach(row => {
+    const pairId = row.dataset.pair;
+    row.querySelector('[data-action="accept"]').addEventListener('click', async () => {
+      await respondFriendRequest(pairId, true);
+      await loadFriendsPage();
+    });
+    row.querySelector('[data-action="reject"]').addEventListener('click', async () => {
+      await respondFriendRequest(pairId, false);
+      await loadFriendsPage();
+    });
+  });
+}
+
+function renderFriendList(){
+  const el = document.getElementById('friendListContent');
+  if(!el) return;
+  const { friendUids, friendSettings, friendProfiles } = friendsPageCache;
+  if(friendUids.length === 0){ el.innerHTML = '<div class="rank-empty">まだフレンドがいません</div>'; return; }
+  el.innerHTML = friendUids.map(uid => {
+    const profile = friendProfiles[uid] || {};
+    const setting = friendSettings[uid] || { includeInRanking: true, includeTheirReviewOfMe: false };
+    const name = profile.nickname || uid;
+    return `
+      <div class="settings-row" data-uid="${uid}">
+        <span class="settings-label">${escapeHTML(name)}</span>
+        <button class="lang-btn${setting.includeInRanking ? ' active' : ''}" data-toggle="includeInRanking">ランキング反映</button>
+        <button class="lang-btn${setting.includeTheirReviewOfMe ? ' active' : ''}" data-toggle="includeTheirReviewOfMe">他己評価を算入</button>
+        <button class="lang-btn" data-action="link">過去データをリンク</button>
+      </div>
+      <div class="unlinked-picker" id="unlinkedPicker_${uid}" style="display:none; margin:4px 0 10px; font-size:12px;"></div>
+    `;
+  }).join('');
+
+  el.querySelectorAll('[data-uid]').forEach(row => {
+    const uid = row.dataset.uid;
+    row.querySelectorAll('[data-toggle]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const key = btn.dataset.toggle;
+        const current = friendsPageCache.friendSettings[uid] || { includeInRanking: true, includeTheirReviewOfMe: false };
+        current[key] = !current[key];
+        friendsPageCache.friendSettings[uid] = current;
+        btn.classList.toggle('active', current[key]);
+        await setFriendSetting(firebaseUser.uid, uid, { [key]: current[key] });
+        if(key === 'includeInRanking') renderFriendRanking();
+        if(key === 'includeTheirReviewOfMe') renderPeerReviewSection();
+      });
+    });
+    const linkBtn = row.querySelector('[data-action="link"]');
+    if(linkBtn) linkBtn.addEventListener('click', () => toggleUnlinkedPicker(uid));
+  });
+}
+
+async function toggleUnlinkedPicker(friendUid){
+  const box = document.getElementById('unlinkedPicker_' + friendUid);
+  if(!box) return;
+  if(box.style.display !== 'none'){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.textContent = '読み込み中…';
+  try{
+    const list = await listUnlinkedPeerAssessments(firebaseUser.uid);
+    if(list.length === 0){ box.textContent = '未連携の他人鑑定データはありません'; return; }
+    box.innerHTML = list.map(a => `<button class="lang-btn" data-aid="${a.id}">${escapeHTML(a.targetNameRaw || '無名')} (${Math.round(a.total)}pt) をリンク</button>`).join(' ');
+    box.querySelectorAll('[data-aid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try{
+          await linkLegacyAssessmentToFriend(btn.dataset.aid, friendUid, firebaseUser.uid);
+          box.textContent = 'リンクしました';
+        }catch(err){ box.textContent = err.message || 'リンクに失敗しました'; }
+      });
+    });
+  }catch(err){ box.textContent = '読み込みに失敗しました'; }
+}
+
+function renderFriendRanking(){
+  const el = document.getElementById('friendRankingContent');
+  if(!el) return;
+  const { friendUids, friendSettings, friendProfiles } = friendsPageCache;
+  const includedUids = friendUids.filter(uid => (friendSettings[uid] || {}).includeInRanking);
+  el.innerHTML = '<div class="rank-empty">読み込み中…</div>';
+  fetchFriendsSelfAssessments(includedUids).then(friendSelf => {
+    const rows = [{ label: 'あなた', total: currentTotal }];
+    friendSelf.forEach(a => {
+      const profile = friendProfiles[a.authorUid] || {};
+      const name = profile.nickname || a.reviewerDisplayName || 'フレンド';
+      rows.push({ label: name, total: a.total });
+    });
+    rows.sort((a, b) => b.total - a.total);
+    el.innerHTML = rows.map((r, i) => `<div class="settings-row"><span>${i + 1}. ${escapeHTML(r.label)}</span><span>${Math.round(r.total * 10000).toLocaleString()}円</span></div>`).join('');
+  }).catch(() => { el.innerHTML = '<div class="rank-empty">読み込みに失敗しました</div>'; });
+}
+
+function renderPeerReviewSection(){
+  const el = document.getElementById('peerReviewSection');
+  if(!el) return;
+  const { peerAssessments, friendSettings, friendProfiles } = friendsPageCache;
+  if(peerAssessments.length === 0){
+    el.innerHTML = '<div class="rank-empty">まだ誰からも他己評価されていません</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div id="peerReviewerChecklist"></div>
+    <div class="settings-row">
+      <span class="settings-label">属性で絞り込み</span>
+      <select id="segmentFilterSelect" multiple style="flex:1; min-width:160px;">
+        ${SEGMENT_OPTIONS.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">匿名表示</span>
+      <button class="lang-btn" id="anonymousToggleBtn">OFF</button>
+    </div>
+    <div id="peerAverageResult" style="margin-top:8px;"></div>
+  `;
+
+  const checklistEl = document.getElementById('peerReviewerChecklist');
+  checklistEl.innerHTML = peerAssessments.map(a => {
+    const uid = a.authorUid;
+    const profile = friendProfiles[uid] || {};
+    const name = profile.nickname || a.reviewerDisplayName || 'フレンド';
+    const setting = friendSettings[uid] || { includeTheirReviewOfMe: false };
+    return `<label style="display:inline-flex; align-items:center; gap:4px; margin:2px 8px 2px 0; font-size:12px;">
+      <input type="checkbox" data-uid="${uid}" ${setting.includeTheirReviewOfMe ? 'checked' : ''}> ${escapeHTML(name)}
+    </label>`;
+  }).join('');
+  checklistEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', async e => {
+      const uid = e.target.dataset.uid;
+      const checked = e.target.checked;
+      friendsPageCache.friendSettings[uid] = Object.assign({ includeInRanking: true }, friendsPageCache.friendSettings[uid], { includeTheirReviewOfMe: checked });
+      await setFriendSetting(firebaseUser.uid, uid, { includeTheirReviewOfMe: checked });
+      recomputePeerAverage();
+    });
+  });
+
+  let anonymousOn = false;
+  const anonBtn = document.getElementById('anonymousToggleBtn');
+  anonBtn.addEventListener('click', () => {
+    anonymousOn = !anonymousOn;
+    anonBtn.textContent = anonymousOn ? 'ON' : 'OFF';
+    anonBtn.classList.toggle('active', anonymousOn);
+    recomputePeerAverage();
+  });
+  document.getElementById('segmentFilterSelect').addEventListener('change', recomputePeerAverage);
+
+  function recomputePeerAverage(){
+    const includedUids = new Set(
+      Object.keys(friendsPageCache.friendSettings).filter(uid => friendsPageCache.friendSettings[uid].includeTheirReviewOfMe)
+    );
+    const segmentKeys = Array.from(document.getElementById('segmentFilterSelect').selectedOptions).map(o => o.value);
+    const result = aggregatePeerAssessments(peerAssessments, {
+      includedReviewerUids: includedUids.size ? includedUids : null,
+      segmentKeys,
+      anonymous: anonymousOn,
+    });
+    renderPeerResult(result);
+  }
+  recomputePeerAverage();
+}
+
+function renderPeerResult(result){
+  const el = document.getElementById('peerAverageResult');
+  if(!el) return;
+  if(result.count === 0){ el.innerHTML = '該当する評価がありません（算入にチェックを入れてください）'; return; }
+  let html = `<p>対象人数: ${result.count}人 / 平均: ${result.average.toFixed(1)}pt</p>`;
+  html += result.lowSample
+    ? '<p style="font-size:11px; color:var(--ink-soft);">※人数が少ないため内訳は非表示です（平均値のみ表示）</p>'
+    : '<ul style="padding-left:18px; margin:4px 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
+  el.innerHTML = html;
+}
 
 const NAME_EN = {
   'スポーツ・身体能力':'Sports & Physical', 'ゲーム':'Games', '学問・知識':'Academics & Knowledge',
@@ -2470,6 +3050,11 @@ async function saveState(){
       console.warn('leaderboard save error:', err);
       rankErr = (err && err.message) ? err.message : String(err);
     }
+  }
+
+  if(firebaseUser){
+    try{ await syncAssessmentsToFirestore(); }
+    catch(err){ console.warn('syncAssessmentsToFirestore failed:', err); }
   }
 
   const parts = [];
@@ -4575,7 +5160,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData' };
+  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -4593,6 +5178,7 @@ function showPage(pageName){
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
   if(pageName === 'data') loadDataStats();
+  if(pageName === 'friends') loadFriendsPage();
 }
 
 document.getElementById('toRankingBtn').addEventListener('click', () => showPage('rank'));
@@ -4605,6 +5191,7 @@ document.getElementById('navCompareBtn').addEventListener('click', () => showPag
 document.getElementById('navTitlesBtn').addEventListener('click', () => showPage('titles'));
 document.getElementById('navShareBtn').addEventListener('click', () => showPage('share'));
 document.getElementById('navDataBtn').addEventListener('click', () => showPage('data'));
+document.getElementById('navFriendsBtn').addEventListener('click', () => showPage('friends'));
 document.getElementById('shareImageBtn').addEventListener('click', async () => {
   const canvas = document.getElementById('shareCanvas');
   const btnText = document.getElementById('shareBtnText');
