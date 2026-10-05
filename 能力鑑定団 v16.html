@@ -1045,7 +1045,9 @@ async function handleGoogleLogin(){
     return;
   }
   try{
-    await firebaseAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+    await firebaseAuth.signInWithPopup(googleProvider);
   }catch(err){
     console.warn('Google sign-in failed:', err);
     if(statusEl) statusEl.textContent = t('accountSignInFailed');
