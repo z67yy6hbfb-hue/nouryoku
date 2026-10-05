@@ -487,6 +487,11 @@
     display:flex; flex-direction:column; gap:8px;
     padding:12px 4px 6px; border-top:1px solid var(--line-soft); margin-top:6px;
   }
+  .account-row{
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+    padding:4px 4px 12px; border-bottom:1px solid var(--line-soft); margin-bottom:6px;
+  }
+  .account-status{font-size:11.5px; color:var(--ink-soft); flex:1 0 auto;}
   .backup-btns{display:flex; flex-wrap:wrap; gap:6px;}
   .backup-danger{color:var(--red); border-color:var(--red);}
   .backup-status{font-size:10.5px; color:var(--gold-deep); min-height:13px;}
@@ -750,6 +755,12 @@
     <div class="settings-block">
       <button class="settings-toggle" id="settingsToggle">⚙️ <span id="settingsToggleLabel">設定</span></button>
       <div class="settings-panel" id="settingsPanel">
+        <div class="account-row" id="accountRow">
+          <span class="settings-label" id="accountLabelEl">アカウント</span>
+          <div class="account-status" id="accountStatus">未ログイン</div>
+          <button class="lang-btn" id="googleLoginBtn">Googleでログイン</button>
+          <button class="lang-btn backup-danger" id="googleLogoutBtn" style="display:none;">ログアウト</button>
+        </div>
         <div class="settings-row">
           <span class="settings-label" id="languageLabelEl">言語</span>
           <div class="settings-lang-btns">
@@ -914,6 +925,10 @@
 
 <canvas id="fireworksCanvas"></canvas>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
 <script>
 /* --- ストレージ互換シム ---------------------------------------------------
    このアプリは元々 Claude Artifact 上の window.storage (KV API) 前提で作られている。
@@ -938,6 +953,102 @@ if (typeof window.storage === 'undefined') {
     },
     async delete(key){ localStorage.removeItem(P + key); },
   };
+}
+
+/* --- Firebase ログイン連携 ---------------------------------------------
+   Google アカウントでログインすると、個人データ(kantei-state)を
+   Firestore (users/{uid}) に保存する。別の端末・ブラウザでも同じ
+   アカウントでログインすれば自動で読み込まれる。
+   未ログイン時は従来どおり window.storage (ローカル/共有ストレージ) を使う。 */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCuZyX7JNa7a9sDZiGlfPHmv7ImagsZY0Y",
+  authDomain: "nouryoku-kanteidan-8a9d5.firebaseapp.com",
+  projectId: "nouryoku-kanteidan-8a9d5",
+  storageBucket: "nouryoku-kanteidan-8a9d5.firebasestorage.app",
+  messagingSenderId: "187890717236",
+  appId: "1:187890717236:web:60ef7a5afc9488d1c17061",
+};
+let firebaseAuth = null;
+let firebaseDb = null;
+let firebaseUser = null;
+try{
+  if(typeof firebase !== 'undefined'){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firebaseAuth = firebase.auth();
+    firebaseDb = firebase.firestore();
+  }
+}catch(err){ console.warn('Firebase init failed:', err); }
+
+const _localStorageGet = window.storage.get.bind(window.storage);
+const _localStorageSet = window.storage.set.bind(window.storage);
+
+window.storage.get = async function(key, shared){
+  if(firebaseUser && key === 'kantei-state'){
+    try{
+      const snap = await firebaseDb.collection('users').doc(firebaseUser.uid).get();
+      const data = snap.exists ? snap.data() : null;
+      return (data && data.kanteiState) ? { value: data.kanteiState } : null;
+    }catch(err){ console.warn('Firestore get failed, falling back to local:', err); }
+  }
+  return _localStorageGet(key, shared);
+};
+window.storage.set = async function(key, value, shared){
+  if(firebaseUser && key === 'kantei-state'){
+    try{
+      await firebaseDb.collection('users').doc(firebaseUser.uid).set({
+        kanteiState: value,
+        email: firebaseUser.email || null,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return;
+    }catch(err){ console.warn('Firestore set failed, falling back to local:', err); }
+  }
+  return _localStorageSet(key, value, shared);
+};
+
+function updateAccountUI(){
+  const statusEl = document.getElementById('accountStatus');
+  const loginBtn = document.getElementById('googleLoginBtn');
+  const logoutBtn = document.getElementById('googleLogoutBtn');
+  if(!statusEl) return;
+  if(firebaseUser){
+    statusEl.textContent = (lang === 'en' ? 'Signed in: ' : 'ログイン中: ') + (firebaseUser.email || firebaseUser.displayName || '');
+    if(loginBtn) loginBtn.style.display = 'none';
+    if(logoutBtn) logoutBtn.style.display = '';
+  } else {
+    statusEl.textContent = t('accountSignedOut');
+    if(loginBtn) loginBtn.style.display = '';
+    if(logoutBtn) logoutBtn.style.display = 'none';
+  }
+}
+
+async function handleGoogleLogin(){
+  const statusEl = document.getElementById('accountStatus');
+  if(!firebaseAuth){
+    if(statusEl) statusEl.textContent = t('accountUnavailable');
+    return;
+  }
+  try{
+    await firebaseAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  }catch(err){
+    console.warn('Google sign-in failed:', err);
+    if(statusEl) statusEl.textContent = t('accountSignInFailed');
+  }
+}
+async function handleGoogleLogout(){
+  if(!firebaseAuth) return;
+  try{ await firebaseAuth.signOut(); }
+  catch(err){ console.warn('Sign-out failed:', err); }
+}
+
+if(firebaseAuth){
+  firebaseAuth.onAuthStateChanged(async (user) => {
+    firebaseUser = user;
+    updateAccountUI();
+    if(user){
+      try{ await loadState(); }catch(err){ console.warn('loadState after sign-in failed:', err); }
+    }
+  });
 }
 
 let lang = 'ja';
@@ -1011,6 +1122,12 @@ const UI_TEXT = {
   coefLabel2: { ja:'係数', en:'Coef' },
   statsLabel: { ja:'閲覧統計', en:'View stats' },
   thresholdLabel: { ja:'自動停止の基準(1日あたり)', en:'Auto-pause threshold (per day)' },
+  accountLabel: { ja:'アカウント', en:'Account' },
+  googleLogin: { ja:'Googleでログイン', en:'Sign in with Google' },
+  googleLogout: { ja:'ログアウト', en:'Sign out' },
+  accountSignedOut: { ja:'未ログイン', en:'Not signed in' },
+  accountUnavailable: { ja:'Googleログインが利用できません', en:'Google sign-in unavailable' },
+  accountSignInFailed: { ja:'ログインに失敗しました', en:'Sign-in failed' },
   backupLabel: { ja:'データのバックアップ', en:'Data backup' },
   exportData: { ja:'エクスポート', en:'Export' },
   importData: { ja:'インポート', en:'Import' },
@@ -4148,6 +4265,10 @@ function applyStaticTranslations(){
   document.getElementById('footerNoteEl').innerHTML = t('footerNote');
   document.getElementById('toRankingBtn').textContent = t('toRanking');
   document.getElementById('settingsToggleLabel').textContent = t('settingsTitle');
+  document.getElementById('accountLabelEl').textContent = t('accountLabel');
+  document.getElementById('googleLoginBtn').textContent = t('googleLogin');
+  document.getElementById('googleLogoutBtn').textContent = t('googleLogout');
+  updateAccountUI();
   document.getElementById('languageLabelEl').textContent = t('languageLabel');
   document.getElementById('coefModeLabelEl').textContent = t('coefModeLabel');
   document.getElementById('coefFixedLabelEl').textContent = t('coefFixedLabel');
@@ -4236,6 +4357,8 @@ function initSettingsUI(){
       loadThreshold();
     }
   });
+  document.getElementById('googleLoginBtn').addEventListener('click', handleGoogleLogin);
+  document.getElementById('googleLogoutBtn').addEventListener('click', handleGoogleLogout);
   document.getElementById('langJaBtn').addEventListener('click', () => setLanguage('ja'));
   document.getElementById('langEnBtn').addEventListener('click', () => setLanguage('en'));
   document.getElementById('coefModeToggleBtn').addEventListener('click', () => setVariableCoefMode(!variableCoefMode));
