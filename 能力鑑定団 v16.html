@@ -555,17 +555,12 @@
     align-items:center; justify-content:center;
   }
   .title-tag{
-    display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:12px;
+    display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:12px;
     background:linear-gradient(135deg, #8b5cf6, #2f7dd1); color:#fff;
     font-family:'Zen Kaku Gothic New', sans-serif;
   }
+  .title-tag .title-icon{ font-size:12px; padding:0; }
   .title-tag.title-tag-none{background:transparent; border:1px dashed var(--line); color:var(--ink-soft); font-weight:500;}
-  .title-chip-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
-  .title-chip{
-    font-size:11px; padding:5px 10px; border-radius:12px; border:1.5px solid var(--ink);
-    background:transparent; color:var(--ink); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
-  }
-  .title-chip.picked{background:linear-gradient(135deg,#8b5cf6,#2f7dd1); border-color:var(--ink); color:#fff; font-weight:700;}
   .rank-date{font-size:10px; color:var(--ink-soft); margin-top:2px;}
   .rank-amount{font-size:15px; font-weight:800; color:var(--red-deep); white-space:nowrap; font-variant-numeric:tabular-nums;}
   .rank-empty{text-align:center; color:var(--ink-soft); font-size:13px; padding:30px 10px;}
@@ -2321,6 +2316,9 @@ async function saveState(){
         date: new Date().toISOString(),
         mode: saveMode,
       };
+      const levelSnapshot = {};
+      Object.keys(p.entries).forEach(id => { levelSnapshot[id] = p.entries[id].level; });
+      payload.levelSnapshot = levelSnapshot;
       if(saveMode === 'variable'){
         const coefSnapshot = {};
         Object.keys(p.entries).forEach(id => { coefSnapshot[id] = p.entries[id].coef; });
@@ -2570,7 +2568,7 @@ function renderCompareChart(){
   const cx = 200, cy = 200, r = 130;
   const angleFor = (i) => (-90 + i * (360 / n)) * Math.PI / 180;
   const pointAt = (i, ratio) => ({ x: cx + ratio * Math.cos(angleFor(i)), y: cy + ratio * Math.sin(angleFor(i)) });
-  const maxPerAxis = GROUPS.map((g, i) => Math.max(1, ...people.map(p => p.groupTotals[i] || 0)));
+  const maxPerAxis = 10;
 
   let parts = [];
   [0.25, 0.5, 0.75, 1].forEach(frac => {
@@ -2585,7 +2583,7 @@ function renderCompareChart(){
   people.forEach((person, pi) => {
     const color = PERSON_DOT_COLORS[pi % PERSON_DOT_COLORS.length];
     const pts = GROUPS.map((g, i) => {
-      const ratio = Math.min(1, (person.groupTotals[i] || 0) / maxPerAxis[i]);
+      const ratio = Math.min(1, (person.groupTotals[i] || 0) / maxPerAxis);
       const p = pointAt(i, ratio * r);
       return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
     }).join(' ');
@@ -2848,372 +2846,596 @@ const RARITY_INFO = {
   2: { label:'★2', gradient:'linear-gradient(135deg,#c9d6e8,#8fa3bf)', glow:'0 0 6px rgba(160,190,220,0.6)' },
   3: { label:'★3', gradient:'linear-gradient(135deg,#f4c542,#a855f7,#e0447f)', glow:'0 0 12px rgba(244,197,66,0.75)' },
   4: { label:'★4', gradient:'linear-gradient(135deg,#f4c542,#e0447f,#8b5cf6,#2f7dd1,#12977a)', glow:'0 0 18px rgba(244,197,66,0.9), 0 0 8px rgba(139,92,246,0.7)' },
+  5: { label:'★5', gradient:'linear-gradient(135deg,#ffffff,#f4c542,#e0447f,#8b5cf6,#2f7dd1,#ffffff)', glow:'0 0 24px rgba(255,255,255,0.95), 0 0 14px rgba(244,197,66,0.9)' },
 };
+const GROUP_IDX = { academics:0, sports:1, arts:2, craft:3, life:4, games:5, social:6 };
+function shadeColor(hex, percent){
+  const num = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+}
+function titleCategoryColor(category){
+  if(GROUP_IDX.hasOwnProperty(category)) return GROUP_COLORS[GROUP_IDX[category]];
+  if(category === 'score') return '#b08d5a';
+  return '#8b5cf6';
+}
+function titleTagGradient(category){
+  const c = titleCategoryColor(category);
+  return `linear-gradient(135deg, ${c}, ${shadeColor(c, -22)})`;
+}
+const LEVEL_ORDER = LEVELS.map(l => l.key);
+
+function groupLeafItems(groupIndex){
+  const g = GROUPS[groupIndex];
+  const leaves = [];
+  g.items.forEach((item, ii) => {
+    if(item.subs){
+      item.subs.forEach((sub, si) => { leaves.push({ id:`g${groupIndex}i${ii}s${si}`, name:item.name, coef:sub.c }); });
+    } else {
+      leaves.push({ id:`g${groupIndex}i${ii}`, name:item.name, coef:item.c });
+    }
+  });
+  return leaves;
+}
+function categoryTotalAtLeast(entry, groupIndex, threshold){
+  return ((entry && entry.groupTotals && entry.groupTotals[groupIndex]) || 0) >= threshold;
+}
+function nameIn(names){ const set = new Set(names); return (name) => set.has(name); }
+function itemTierExact(entry, groupIndex, nameFilter, targetLevel){
+  if(!entry || !entry.levelSnapshot) return false;
+  const tierOrder = ['advanced', 'special', 'extreme'];
+  let bestIdx = -1;
+  groupLeafItems(groupIndex)
+    .filter(leaf => !nameFilter || nameFilter(leaf.name))
+    .forEach(leaf => {
+      const idx = tierOrder.indexOf(entry.levelSnapshot[leaf.id]);
+      if(idx > bestIdx) bestIdx = idx;
+    });
+  if(bestIdx < 0) return false;
+  return tierOrder[bestIdx] === targetLevel;
+}
+function totalItemsAtLeastAcrossAll(entry, minLevelKey){
+  if(!entry || !entry.levelSnapshot) return 0;
+  const minIdx = LEVEL_ORDER.indexOf(minLevelKey);
+  let count = 0;
+  GROUPS.forEach((g, gi) => {
+    groupLeafItems(gi).forEach(leaf => {
+      if(LEVEL_ORDER.indexOf(entry.levelSnapshot[leaf.id]) >= minIdx) count++;
+    });
+  });
+  return count;
+}
 
 const TITLE_RULES = [
   {
-    id: 'gikoha',
-    label: { ja:'🎖️ 技巧派', en:'🎖️ Technician' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'fighter',
-    label: { ja:'🎖️ ファイター', en:'🎖️ Fighter' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'balancer',
-    label: { ja:'🎖️ バランサー', en:'🎖️ Balancer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'sprinter',
-    label: { ja:'🎖️ スプリンター', en:'🎖️ Sprinter' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'allrounder',
-    label: { ja:'🎖️ オールラウンダー', en:'🎖️ All-Rounder' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'gokugisha',
-    label: { ja:'🎖️ 極技者', en:'🎖️ Master of Extremes' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'sports', rarity: 3,
-    test: () => false,
-  },
-  {
-    id: 'creator',
-    label: { ja:'🎖️ クリエイター', en:'🎖️ Creator' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'ongeshi',
-    label: { ja:'🎖️ 音ゲー師', en:'🎖️ Rhythm Master' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'tactician',
-    label: { ja:'🎖️ 戦術家', en:'🎖️ Tactician' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'completer',
-    label: { ja:'🎖️ コンプラー', en:'🎖️ Completionist' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'ranker',
-    label: { ja:'🎖️ ランカー', en:'🎖️ Ranker' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'yugisha',
-    label: { ja:'🎖️ 遊戯者', en:'🎖️ Player' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'haijin',
-    label: { ja:'🎖️ 廃人', en:'🎖️ No-Lifer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'games', rarity: 3,
-    test: () => false,
-  },
-  {
-    id: 'ensouka',
-    label: { ja:'🎖️ 演奏家', en:'🎖️ Performer (Music)' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'artist',
-    label: { ja:'🎖️ アーティスト', en:'🎖️ Artist' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'designer',
-    label: { ja:'🎖️ デザイナー', en:'🎖️ Designer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'performer',
-    label: { ja:'🎖️ パフォーマー', en:'🎖️ Performer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'bungo',
-    label: { ja:'🎖️ 文豪', en:'🎖️ Literary Master' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'geijutsuka',
-    label: { ja:'🎖️ 芸術家', en:'🎖️ Artisan' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'arts', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'hyogensha',
-    label: { ja:'🎖️ 表現者', en:'🎖️ Grand Expressionist' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
+    id: 'arts_t1',
+    label: { ja:'🎖️ 技巧者', en:'🎖️ Skilled Artist' },
+    desc: { ja:'芸術・表現のいずれかの項目で「上級者」に到達', en:'Reach Advanced level in any arts item' },
     category: 'arts', rarity: 3,
-    test: () => false,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.arts, null, 'advanced'),
   },
   {
-    id: 'sugakusha',
-    label: { ja:'🎖️ 数学者', en:'🎖️ Mathematician' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 1,
-    test: () => false,
+    id: 'arts_t2',
+    label: { ja:'🎖️ 名匠', en:'🎖️ Master Artisan' },
+    desc: { ja:'芸術・表現のいずれかの項目で「特上級者」に到達', en:'Reach Superior level in any arts item' },
+    category: 'arts', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.arts, null, 'special'),
   },
   {
-    id: 'scientist',
-    label: { ja:'🎖️ サイエンティスト', en:'🎖️ Scientist' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 1,
-    test: () => false,
+    id: 'arts_t3',
+    label: { ja:'🎖️ 巨匠', en:'🎖️ Grand Master' },
+    desc: { ja:'芸術・表現のいずれかの項目で「極級者」に到達', en:'Reach Ultimate level in any arts item' },
+    category: 'arts', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.arts, null, 'extreme'),
   },
   {
-    id: 'ronkyaku',
-    label: { ja:'🎖️ 論客', en:'🎖️ Debater' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 1,
-    test: () => false,
+    id: 'sports_t1',
+    label: { ja:'🎖️ 実力者', en:'🎖️ Skilled Athlete' },
+    desc: { ja:'スポーツ・身体能力のいずれかの項目で「上級者」に到達', en:'Reach Advanced level in any sports item' },
+    category: 'sports', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.sports, null, 'advanced'),
   },
   {
-    id: 'tankyusha',
-    label: { ja:'🎖️ 探究者', en:'🎖️ Inquirer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 1,
-    test: () => false,
+    id: 'sports_t2',
+    label: { ja:'🎖️ 強豪選手', en:'🎖️ Elite Athlete' },
+    desc: { ja:'スポーツ・身体能力のいずれかの項目で「特上級者」に到達', en:'Reach Superior level in any sports item' },
+    category: 'sports', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.sports, null, 'special'),
   },
   {
-    id: 'hakushikika',
-    label: { ja:'🎖️ 博識家', en:'🎖️ Polymath' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 2,
-    test: () => false,
+    id: 'sports_t3',
+    label: { ja:'🎖️ プロ', en:'🎖️ Pro' },
+    desc: { ja:'スポーツ・身体能力のいずれかの項目で「極級者」に到達', en:'Reach Ultimate level in any sports item' },
+    category: 'sports', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.sports, null, 'extreme'),
   },
   {
-    id: 'gakusha',
-    label: { ja:'🎖️ 学者', en:'🎖️ Scholar' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'academics', rarity: 3,
-    test: () => false,
-  },
-  {
-    id: 'ryorinin',
-    label: { ja:'🎖️ 料理人', en:'🎖️ Cook' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'sojinin',
-    label: { ja:'🎖️ 掃除人', en:'🎖️ Cleaner' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'sentakushi',
-    label: { ja:'🎖️ 洗濯師', en:'🎖️ Laundry Master' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'kakeishi',
-    label: { ja:'🎖️ 家計士', en:'🎖️ Household Accountant' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'seikatsukosha',
-    label: { ja:'🎖️ 生活巧者', en:'🎖️ Life Expert' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'kurashinotatsujin',
-    label: { ja:'🎖️ 暮らしの達人', en:'🎖️ Master of Living' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'life', rarity: 3,
-    test: () => false,
-  },
-  {
-    id: 'crafter',
-    label: { ja:'🎖️ クラフター', en:'🎖️ Crafter' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'craft', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'mechanic',
-    label: { ja:'🎖️ メカニック', en:'🎖️ Mechanic' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'craft', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'gishi',
-    label: { ja:'🎖️ 技師', en:'🎖️ Technical Engineer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'craft', rarity: 1,
-    test: () => false,
-  },
-  {
-    id: 'shokunin',
-    label: { ja:'🎖️ 職人', en:'🎖️ Craftsman' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'craft', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'engineer',
-    label: { ja:'🎖️ エンジニア', en:'🎖️ Engineer' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'craft', rarity: 2,
-    test: () => false,
-  },
-  {
-    id: 'hatsumeika',
-    label: { ja:'🎖️ 発明家', en:'🎖️ Inventor' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
+    id: 'craft_t1',
+    label: { ja:'🎖️ 技術者', en:'🎖️ Technician' },
+    desc: { ja:'技術・ものづくりのいずれかの項目で「上級者」に到達', en:'Reach Advanced level in any craft item' },
     category: 'craft', rarity: 3,
-    test: () => false,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.craft, null, 'advanced'),
   },
   {
-    id: 'hanashijozu',
-    label: { ja:'🎖️ 話し上手', en:'🎖️ Great Talker' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'social', rarity: 1,
-    test: () => false,
+    id: 'craft_t2',
+    label: { ja:'🎖️ 名匠', en:'🎖️ Master Craftsman' },
+    desc: { ja:'技術・ものづくりのいずれかの項目で「特上級者」に到達', en:'Reach Superior level in any craft item' },
+    category: 'craft', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.craft, null, 'special'),
   },
   {
-    id: 'kikijozu',
-    label: { ja:'🎖️ 聞き上手', en:'🎖️ Great Listener' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'social', rarity: 1,
-    test: () => false,
+    id: 'craft_t3',
+    label: { ja:'🎖️ 匠', en:'🎖️ Master' },
+    desc: { ja:'技術・ものづくりのいずれかの項目で「極級者」に到達', en:'Reach Ultimate level in any craft item' },
+    category: 'craft', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.craft, null, 'extreme'),
   },
   {
-    id: 'moodmaker',
-    label: { ja:'🎖️ ムードメーカー', en:'🎖️ Mood Maker' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'social', rarity: 1,
-    test: () => false,
+    id: 'academics_t1',
+    label: { ja:'🎖️ 学士', en:'🎖️ Bachelor' },
+    desc: { ja:'学問・知識のいずれかの項目で「上級者」に到達', en:'Reach Advanced level in any academics item' },
+    category: 'academics', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.academics, null, 'advanced'),
   },
   {
-    id: 'negotiator',
-    label: { ja:'🎖️ ネゴシエーター', en:'🎖️ Negotiator' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'social', rarity: 1,
-    test: () => false,
+    id: 'academics_t2',
+    label: { ja:'🎖️ 学術家', en:'🎖️ Scholar' },
+    desc: { ja:'学問・知識のいずれかの項目で「特上級者」に到達', en:'Reach Superior level in any academics item' },
+    category: 'academics', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.academics, null, 'special'),
   },
   {
-    id: 'charisma',
-    label: { ja:'🎖️ カリスマ', en:'🎖️ Charisma' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'social', rarity: 2,
-    test: () => false,
+    id: 'academics_t3',
+    label: { ja:'🎖️ 研究者', en:'🎖️ Researcher' },
+    desc: { ja:'学問・知識のいずれかの項目で「極級者」に到達', en:'Reach Ultimate level in any academics item' },
+    category: 'academics', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.academics, null, 'extreme'),
   },
   {
-    id: 'shinrishoaku',
-    label: { ja:'🎖️ 心理掌握', en:'🎖️ Master of Minds' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
+    id: 'games_t1',
+    label: { ja:'🎖️ 競技者', en:'🎖️ Competitor' },
+    desc: { ja:'ゲームのいずれかの項目で「上級者」に到達', en:'Reach Advanced level in any games item' },
+    category: 'games', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.games, null, 'advanced'),
+  },
+  {
+    id: 'games_t2',
+    label: { ja:'🎖️ ランカー', en:'🎖️ Ranker' },
+    desc: { ja:'ゲームのいずれかの項目で「特上級者」に到達', en:'Reach Superior level in any games item' },
+    category: 'games', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.games, null, 'special'),
+  },
+  {
+    id: 'games_t3',
+    label: { ja:'🎖️ トップランカー', en:'🎖️ Top Ranker' },
+    desc: { ja:'ゲームのいずれかの項目で「極級者」に到達', en:'Reach Ultimate level in any games item' },
+    category: 'games', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.games, null, 'extreme'),
+  },
+  {
+    id: 'social_persuade_t1',
+    label: { ja:'🎖️ 口上手', en:'🎖️ Smooth Talker' },
+    desc: { ja:'伝達・説得で「上級者」に到達', en:'Reach Advanced level in 伝達・説得' },
     category: 'social', rarity: 3,
-    test: () => false,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['伝達・説得']), 'advanced'),
   },
   {
-    id: 'takumi',
-    label: { ja:'🎖️ 匠', en:'🎖️ Takumi (Artisan Fusion)' },
-    category: 'fusion', rarity: 3,
-    combo: ['gikoha', 'shokunin'],
-    test: () => false,
+    id: 'social_persuade_t2',
+    label: { ja:'🎖️ 交渉人', en:'🎖️ Negotiator' },
+    desc: { ja:'伝達・説得で「特上級者」に到達', en:'Reach Superior level in 伝達・説得' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['伝達・説得']), 'special'),
   },
   {
-    id: 'sakushi',
-    label: { ja:'🎖️ 策士', en:'🎖️ Strategist Fusion' },
-    category: 'fusion', rarity: 2,
-    combo: ['tactician', 'ronkyaku'],
-    test: () => false,
+    id: 'social_persuade_t3',
+    label: { ja:'🎖️ 人心掌握者', en:'🎖️ Master of Hearts' },
+    desc: { ja:'伝達・説得で「極級者」に到達', en:'Reach Ultimate level in 伝達・説得' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['伝達・説得']), 'extreme'),
   },
   {
-    id: 'bannou',
-    label: { ja:'🎖️ 万能', en:'🎖️ Omni-Talent Fusion' },
-    category: 'fusion', rarity: 4,
-    combo: ['allrounder', 'hakushikika'],
-    test: () => false,
+    id: 'social_chat_t1',
+    label: { ja:'🎖️ 話し上手', en:'🎖️ Great Talker' },
+    desc: { ja:'日常会話で「上級者」に到達', en:'Reach Advanced level in 日常会話' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['日常会話']), 'advanced'),
+  },
+  {
+    id: 'social_chat_t2',
+    label: { ja:'🎖️ 話達者', en:'🎖️ Master Conversationalist' },
+    desc: { ja:'日常会話で「特上級者」に到達', en:'Reach Superior level in 日常会話' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['日常会話']), 'special'),
+  },
+  {
+    id: 'social_chat_t3',
+    label: { ja:'🎖️ 話術士', en:'🎖️ Master Orator' },
+    desc: { ja:'日常会話で「極級者」に到達', en:'Reach Ultimate level in 日常会話' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['日常会話']), 'extreme'),
+  },
+  {
+    id: 'social_analysis_t1',
+    label: { ja:'🎖️ 観察眼', en:'🎖️ Keen Observer' },
+    desc: { ja:'対人分析で「上級者」に到達', en:'Reach Advanced level in 対人分析' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['対人分析']), 'advanced'),
+  },
+  {
+    id: 'social_analysis_t2',
+    label: { ja:'🎖️ 鑑定眼', en:'🎖️ Discerning Eye' },
+    desc: { ja:'対人分析で「特上級者」に到達', en:'Reach Superior level in 対人分析' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['対人分析']), 'special'),
+  },
+  {
+    id: 'social_analysis_t3',
+    label: { ja:'🎖️ 慧眼', en:'🎖️ The Sage Eye' },
+    desc: { ja:'対人分析で「極級者」に到達', en:'Reach Ultimate level in 対人分析' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['対人分析']), 'extreme'),
+  },
+  {
+    id: 'social_coop_t1',
+    label: { ja:'🎖️ 調整役', en:'🎖️ Mediator' },
+    desc: { ja:'協調性・思いやりで「上級者」に到達', en:'Reach Advanced level in 協調性・思いやり' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['協調性・思いやり']), 'advanced'),
+  },
+  {
+    id: 'social_coop_t2',
+    label: { ja:'🎖️ 潤滑油', en:'🎖️ The Glue' },
+    desc: { ja:'協調性・思いやりで「特上級者」に到達', en:'Reach Superior level in 協調性・思いやり' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['協調性・思いやり']), 'special'),
+  },
+  {
+    id: 'social_coop_t3',
+    label: { ja:'🎖️ 調停者', en:'🎖️ Peacemaker' },
+    desc: { ja:'協調性・思いやりで「極級者」に到達', en:'Reach Ultimate level in 協調性・思いやり' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['協調性・思いやり']), 'extreme'),
+  },
+  {
+    id: 'social_vibe_t1',
+    label: { ja:'🎖️ ムードメーカー', en:'🎖️ Mood Maker' },
+    desc: { ja:'ノリ・場適応で「上級者」に到達', en:'Reach Advanced level in ノリ・場適応' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ノリ・場適応']), 'advanced'),
+  },
+  {
+    id: 'social_vibe_t2',
+    label: { ja:'🎖️ 芸人肌', en:'🎖️ Natural Entertainer' },
+    desc: { ja:'ノリ・場適応で「特上級者」に到達', en:'Reach Superior level in ノリ・場適応' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ノリ・場適応']), 'special'),
+  },
+  {
+    id: 'social_vibe_t3',
+    label: { ja:'🎖️ プロ芸人', en:'🎖️ Pro Entertainer' },
+    desc: { ja:'ノリ・場適応で「極級者」に到達', en:'Reach Ultimate level in ノリ・場適応' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ノリ・場適応']), 'extreme'),
+  },
+  {
+    id: 'social_humor_t1',
+    label: { ja:'🎖️ ユーモア', en:'🎖️ Humorist' },
+    desc: { ja:'ユーモアで「上級者」に到達', en:'Reach Advanced level in ユーモア' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ユーモア']), 'advanced'),
+  },
+  {
+    id: 'social_humor_t2',
+    label: { ja:'🎖️ ひょうきん者', en:'🎖️ Class Clown' },
+    desc: { ja:'ユーモアで「特上級者」に到達', en:'Reach Superior level in ユーモア' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ユーモア']), 'special'),
+  },
+  {
+    id: 'social_humor_t3',
+    label: { ja:'🎖️ 洒脱家', en:'🎖️ Wit' },
+    desc: { ja:'ユーモアで「極級者」に到達', en:'Reach Ultimate level in ユーモア' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['ユーモア']), 'extreme'),
+  },
+  {
+    id: 'social_bond_t1',
+    label: { ja:'🎖️ 人たらし', en:'🎖️ Charmer' },
+    desc: { ja:'関係構築で「上級者」に到達', en:'Reach Advanced level in 関係構築' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['関係構築']), 'advanced'),
+  },
+  {
+    id: 'social_bond_t2',
+    label: { ja:'🎖️ 顔役', en:'🎖️ Well-Connected' },
+    desc: { ja:'関係構築で「特上級者」に到達', en:'Reach Superior level in 関係構築' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['関係構築']), 'special'),
+  },
+  {
+    id: 'social_bond_t3',
+    label: { ja:'🎖️ 人脈家', en:'🎖️ Super-Connector' },
+    desc: { ja:'関係構築で「極級者」に到達', en:'Reach Ultimate level in 関係構築' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['関係構築']), 'extreme'),
+  },
+  {
+    id: 'social_lead_t1',
+    label: { ja:'🎖️ 指揮役', en:'🎖️ Director' },
+    desc: { ja:'リーダーシップで「上級者」に到達', en:'Reach Advanced level in リーダーシップ' },
+    category: 'social', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['リーダーシップ']), 'advanced'),
+  },
+  {
+    id: 'social_lead_t2',
+    label: { ja:'🎖️ 統率者', en:'🎖️ Commander' },
+    desc: { ja:'リーダーシップで「特上級者」に到達', en:'Reach Superior level in リーダーシップ' },
+    category: 'social', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['リーダーシップ']), 'special'),
+  },
+  {
+    id: 'social_lead_t3',
+    label: { ja:'🎖️ カリスマ', en:'🎖️ Charisma' },
+    desc: { ja:'リーダーシップで「極級者」に到達', en:'Reach Ultimate level in リーダーシップ' },
+    category: 'social', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.social, nameIn(['リーダーシップ']), 'extreme'),
+  },
+  {
+    id: 'life_cook_t1',
+    label: { ja:'🎖️ 料理巧者', en:'🎖️ Skilled at 料理' },
+    desc: { ja:'料理で「上級者」に到達', en:'Reach Advanced level in 料理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['料理']), 'advanced'),
+  },
+  {
+    id: 'life_cook_t2',
+    label: { ja:'🎖️ 料理達人', en:'🎖️ 料理 Master' },
+    desc: { ja:'料理で「特上級者」に到達', en:'Reach Superior level in 料理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['料理']), 'special'),
+  },
+  {
+    id: 'life_cook_t3',
+    label: { ja:'🎖️ 料理のプロ', en:'🎖️ 料理 Pro' },
+    desc: { ja:'料理で「極級者」に到達', en:'Reach Ultimate level in 料理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['料理']), 'extreme'),
+  },
+  {
+    id: 'life_clean_t1',
+    label: { ja:'🎖️ 掃除巧者', en:'🎖️ Skilled at 掃除' },
+    desc: { ja:'掃除・整理で「上級者」に到達', en:'Reach Advanced level in 掃除・整理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['掃除・整理']), 'advanced'),
+  },
+  {
+    id: 'life_clean_t2',
+    label: { ja:'🎖️ 掃除達人', en:'🎖️ 掃除 Master' },
+    desc: { ja:'掃除・整理で「特上級者」に到達', en:'Reach Superior level in 掃除・整理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['掃除・整理']), 'special'),
+  },
+  {
+    id: 'life_clean_t3',
+    label: { ja:'🎖️ 掃除のプロ', en:'🎖️ 掃除 Pro' },
+    desc: { ja:'掃除・整理で「極級者」に到達', en:'Reach Ultimate level in 掃除・整理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['掃除・整理']), 'extreme'),
+  },
+  {
+    id: 'life_laundry_t1',
+    label: { ja:'🎖️ 洗濯巧者', en:'🎖️ Skilled at 洗濯' },
+    desc: { ja:'洗濯・衣類管理で「上級者」に到達', en:'Reach Advanced level in 洗濯・衣類管理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['洗濯・衣類管理']), 'advanced'),
+  },
+  {
+    id: 'life_laundry_t2',
+    label: { ja:'🎖️ 洗濯達人', en:'🎖️ 洗濯 Master' },
+    desc: { ja:'洗濯・衣類管理で「特上級者」に到達', en:'Reach Superior level in 洗濯・衣類管理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['洗濯・衣類管理']), 'special'),
+  },
+  {
+    id: 'life_laundry_t3',
+    label: { ja:'🎖️ 洗濯のプロ', en:'🎖️ 洗濯 Pro' },
+    desc: { ja:'洗濯・衣類管理で「極級者」に到達', en:'Reach Ultimate level in 洗濯・衣類管理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['洗濯・衣類管理']), 'extreme'),
+  },
+  {
+    id: 'life_finance_t1',
+    label: { ja:'🎖️ 家計巧者', en:'🎖️ Skilled at 家計' },
+    desc: { ja:'家計管理で「上級者」に到達', en:'Reach Advanced level in 家計管理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['家計管理']), 'advanced'),
+  },
+  {
+    id: 'life_finance_t2',
+    label: { ja:'🎖️ 家計達人', en:'🎖️ 家計 Master' },
+    desc: { ja:'家計管理で「特上級者」に到達', en:'Reach Superior level in 家計管理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['家計管理']), 'special'),
+  },
+  {
+    id: 'life_finance_t3',
+    label: { ja:'🎖️ 家計のプロ', en:'🎖️ 家計 Pro' },
+    desc: { ja:'家計管理で「極級者」に到達', en:'Reach Ultimate level in 家計管理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['家計管理']), 'extreme'),
+  },
+  {
+    id: 'life_shopping_t1',
+    label: { ja:'🎖️ 買い物巧者', en:'🎖️ Skilled at 買い物' },
+    desc: { ja:'買い物・生活管理で「上級者」に到達', en:'Reach Advanced level in 買い物・生活管理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['買い物・生活管理']), 'advanced'),
+  },
+  {
+    id: 'life_shopping_t2',
+    label: { ja:'🎖️ 買い物達人', en:'🎖️ 買い物 Master' },
+    desc: { ja:'買い物・生活管理で「特上級者」に到達', en:'Reach Superior level in 買い物・生活管理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['買い物・生活管理']), 'special'),
+  },
+  {
+    id: 'life_shopping_t3',
+    label: { ja:'🎖️ 買い物のプロ', en:'🎖️ 買い物 Pro' },
+    desc: { ja:'買い物・生活管理で「極級者」に到達', en:'Reach Ultimate level in 買い物・生活管理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['買い物・生活管理']), 'extreme'),
+  },
+  {
+    id: 'life_schedule_t1',
+    label: { ja:'🎖️ スケジュール巧者', en:'🎖️ Skilled at スケジュール' },
+    desc: { ja:'生活スケジュールで「上級者」に到達', en:'Reach Advanced level in 生活スケジュール' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['生活スケジュール']), 'advanced'),
+  },
+  {
+    id: 'life_schedule_t2',
+    label: { ja:'🎖️ スケジュール達人', en:'🎖️ スケジュール Master' },
+    desc: { ja:'生活スケジュールで「特上級者」に到達', en:'Reach Superior level in 生活スケジュール' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['生活スケジュール']), 'special'),
+  },
+  {
+    id: 'life_schedule_t3',
+    label: { ja:'🎖️ スケジュールのプロ', en:'🎖️ スケジュール Pro' },
+    desc: { ja:'生活スケジュールで「極級者」に到達', en:'Reach Ultimate level in 生活スケジュール' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['生活スケジュール']), 'extreme'),
+  },
+  {
+    id: 'life_diy_t1',
+    label: { ja:'🎖️ DIY巧者', en:'🎖️ Skilled at DIY' },
+    desc: { ja:'DIY・修理で「上級者」に到達', en:'Reach Advanced level in DIY・修理' },
+    category: 'life', rarity: 3,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['DIY・修理']), 'advanced'),
+  },
+  {
+    id: 'life_diy_t2',
+    label: { ja:'🎖️ DIY達人', en:'🎖️ DIY Master' },
+    desc: { ja:'DIY・修理で「特上級者」に到達', en:'Reach Superior level in DIY・修理' },
+    category: 'life', rarity: 4,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['DIY・修理']), 'special'),
+  },
+  {
+    id: 'life_diy_t3',
+    label: { ja:'🎖️ DIYのプロ', en:'🎖️ DIY Pro' },
+    desc: { ja:'DIY・修理で「極級者」に到達', en:'Reach Ultimate level in DIY・修理' },
+    category: 'life', rarity: 5,
+    test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['DIY・修理']), 'extreme'),
+  },
+  {
+    id: 'zunomeiseki',
+    label: { ja:'🎖️ 頭脳明晰', en:'🎖️ Brilliant Mind' },
+    desc: { ja:'学問・知識の合計スコアが10点以上', en:'Academics & Knowledge category total reaches 10 points' },
+    category: 'academics', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.academics, 10),
+  },
+  {
+    id: 'sportsbannou',
+    label: { ja:'🎖️ 運動神経抜群', en:'🎖️ Natural Athlete' },
+    desc: { ja:'スポーツ・身体能力の合計スコアが10点以上', en:'Sports & Physical category total reaches 10 points' },
+    category: 'sports', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.sports, 10),
+  },
+  {
+    id: 'artsense',
+    label: { ja:'🎖️ 芸術家', en:'🎖️ Artist' },
+    desc: { ja:'芸術・表現の合計スコアが10点以上', en:'Arts & Expression category total reaches 10 points' },
+    category: 'arts', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.arts, 10),
+  },
+  {
+    id: 'kiyozubatsugun',
+    label: { ja:'🎖️ 多才クラフター', en:'🎖️ Versatile Crafter' },
+    desc: { ja:'技術・ものづくりの合計スコアが10点以上', en:'Craft & Engineering category total reaches 10 points' },
+    category: 'craft', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.craft, 10),
+  },
+  {
+    id: 'seikatsuryokubatsugun',
+    label: { ja:'🎖️ 生活強者', en:'🎖️ Life Powerhouse' },
+    desc: { ja:'実用生活の合計スコアが10点以上', en:'Life & Practical category total reaches 10 points' },
+    category: 'life', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.life, 10),
+  },
+  {
+    id: 'gamesensebatsugun',
+    label: { ja:'🎖️ ゲームセンス', en:'🎖️ Game Sense' },
+    desc: { ja:'ゲームの合計スコアが10点以上', en:'Games category total reaches 10 points' },
+    category: 'games', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.games, 10),
+  },
+  {
+    id: 'shakosebatsugun',
+    label: { ja:'🎖️ 愛され上手', en:'🎖️ Everyone\'s Favorite' },
+    desc: { ja:'対人・コミュニケーションの合計スコアが10点以上', en:'Interpersonal & Communication category total reaches 10 points' },
+    category: 'social', rarity: 4, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.social, 10),
   },
   {
     id: 'entertainer',
     label: { ja:'🎖️ エンターテイナー', en:'🎖️ Entertainer Fusion' },
-    category: 'fusion', rarity: 2,
+    category: 'fusion', rarity: 2, conditional: true,
     combo: ['ensouka', 'performer'],
     test: () => false,
   },
   {
     id: 'dousatsusha',
     label: { ja:'🎖️ 洞察者', en:'🎖️ Insight Fusion' },
-    category: 'fusion', rarity: 4,
+    category: 'fusion', rarity: 4, conditional: true,
     combo: ['kikijozu', 'shinrishoaku'],
     test: () => false,
   },
   {
     id: 'gijutsukaihatsusha',
     label: { ja:'🎖️ 技術開発者', en:'🎖️ Technologist Fusion' },
-    category: 'fusion', rarity: 3,
+    category: 'fusion', rarity: 3, conditional: true,
     combo: ['scientist', 'engineer'],
     test: () => false,
   },
   {
     id: 'star',
     label: { ja:'🎖️ スター', en:'🎖️ Star Fusion' },
-    category: 'fusion', rarity: 3,
+    category: 'fusion', rarity: 3, conditional: true,
     combo: ['charisma', 'moodmaker'],
     test: () => false,
   },
   {
     id: 'kiyobinbo',
     label: { ja:'🎖️ 器用貧乏', en:'🎖️ Jack of All Trades' },
-    desc: { ja:'条件未設定', en:'Condition not set yet' },
-    category: 'score', rarity: 3,
-    test: () => false,
+    desc: { ja:'「初級者」以上の項目が50個以上', en:'Has 50 or more items at Beginner level or higher' },
+    category: 'score', rarity: 3, conditional: true,
+    test: (entry) => totalItemsAtLeastAcrossAll(entry, 'beginner') >= 50,
+  },
+  {
+    id: 'tasai',
+    label: { ja:'🎖️ 多才', en:'🎖️ Multi-Talented' },
+    desc: { ja:'器用貧乏の条件を満たし、かつ「初中級者」以上が30個以上・「中級者」以上が15個以上・「中上級者」以上が5個以上・「上級者」以上が1個以上', en:'Meets the Jack of All Trades condition, with 30+ items at Beginner-Intermediate or higher, 15+ at Intermediate or higher, 5+ at Inter-Advanced or higher, and 1+ at Advanced or higher' },
+    category: 'score', rarity: 4, conditional: true,
+    test: (entry) => totalItemsAtLeastAcrossAll(entry, 'beginner') >= 50
+      && totalItemsAtLeastAcrossAll(entry, 'beginner_inter') >= 30
+      && totalItemsAtLeastAcrossAll(entry, 'intermediate') >= 15
+      && totalItemsAtLeastAcrossAll(entry, 'inter_advanced') >= 5
+      && totalItemsAtLeastAcrossAll(entry, 'advanced') >= 1,
+  },
+  {
+    id: 'bannou',
+    label: { ja:'🎖️ 万能', en:'🎖️ Omni-Talent' },
+    desc: { ja:'多才の条件を満たし、かつ「中級者」以上が20個以上・「中上級者」以上が10個以上・「上級者」以上が5個以上・「特上級者」以上が1個以上', en:'Meets the Multi-Talented condition, with 20+ items at Intermediate or higher, 10+ at Inter-Advanced or higher, 5+ at Advanced or higher, and 1+ at Superior or higher' },
+    category: 'score', rarity: 5, conditional: true,
+    test: (entry) => totalItemsAtLeastAcrossAll(entry, 'beginner') >= 50
+      && totalItemsAtLeastAcrossAll(entry, 'beginner_inter') >= 30
+      && totalItemsAtLeastAcrossAll(entry, 'intermediate') >= 20
+      && totalItemsAtLeastAcrossAll(entry, 'inter_advanced') >= 10
+      && totalItemsAtLeastAcrossAll(entry, 'advanced') >= 5
+      && totalItemsAtLeastAcrossAll(entry, 'special') >= 1,
   },
 ];
 
@@ -3245,6 +3467,15 @@ function comboDescFor(rule){
   return lang === 'en'
     ? `Evolves when you hold both: ${names.join(' + ')}`
     : `「${names.join('」×「')}」を両方持つと進化`;
+}
+
+function titleTagPillHTML(r){
+  const label = r.label[lang] || r.label.ja;
+  const desc = (r.desc && (r.desc[lang] || r.desc.ja)) || comboDescFor(r) || (lang === 'en' ? 'Condition not set yet' : '条件未設定');
+  const stars = r.rarity;
+  const starLabel = (RARITY_INFO[stars] && RARITY_INFO[stars].label) || '';
+  const tagBg = titleTagGradient(r.category);
+  return `<span class="title-tag" style="background:${tagBg};">${starLabel ? escapeHTML(starLabel) + ' ' : ''}${escapeHTML(label)}<span class="title-icon" data-desc="${escapeHTML(desc).replace(/"/g,'&quot;')}">💬</span></span>`;
 }
 
 let currentTitlesTab = 'people';
@@ -3344,7 +3575,8 @@ function renderTitleCatalog(){
 
 function getEarnedRulesForEntry(entry, ctx){
   const earned = getEarnedRuleIds(entry, ctx);
-  return TITLE_RULES.filter(rule => earned.has(rule.id));
+  return TITLE_RULES.filter(rule => earned.has(rule.id))
+    .sort((a, b) => (b.rarity || 0) - (a.rarity || 0));
 }
 
 async function loadTitles(){
@@ -3383,36 +3615,25 @@ async function loadTitles(){
     listEl.innerHTML = '';
     byDate.forEach(entry => {
       const earnedRules = getEarnedRulesForEntry(entry, ctx);
-      const selectedIds = (entry.selectedTitles || []).filter(id => earnedRules.some(r => r.id === id)).slice(0, 2);
-      const selectedTags = selectedIds.map(id => {
-        const r = earnedRules.find(x => x.id === id);
-        return r ? (r.label[lang] || r.label.ja) : '';
-      }).filter(Boolean);
+      const singleRules = earnedRules.filter(r => !r.conditional);
+      const conditionalRules = earnedRules.filter(r => r.conditional);
+      const tagsHTML = earnedRules.length === 0
+        ? `<div class="title-tags"><span class="title-tag title-tag-none">${lang === 'en' ? 'No title yet' : '称号なし'}</span></div>`
+        : [
+            singleRules.length ? `<div class="title-tags title-tags-single">${singleRules.map(titleTagPillHTML).join('')}</div>` : '',
+            conditionalRules.length ? `<div class="title-tags title-tags-conditional">${conditionalRules.map(titleTagPillHTML).join('')}</div>` : '',
+          ].join('');
       const row = document.createElement('div');
       row.className = 'rank-row';
       row.dataset.key = entry.key;
-      let tagsHTML;
-      if(earnedRules.length === 0){
-        tagsHTML = `<span class="title-tag title-tag-none">${lang === 'en' ? 'No title yet' : '称号なし'}</span>`;
-      } else if(selectedTags.length === 0){
-        tagsHTML = `<span class="title-tag title-tag-none">${lang === 'en' ? 'Double-tap to choose' : 'ダブルタップで称号を選択'}</span>`;
-      } else {
-        tagsHTML = selectedTags.map(tt => `<span class="title-tag">${escapeHTML(tt)}</span>`).join('');
-      }
       row.innerHTML = `
         <div class="rank-info">
           <div class="rank-name">${escapeHTML(entry.name || t('anon'))}</div>
           <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}</div>
-          <div class="title-tags">${tagsHTML}</div>
+          ${tagsHTML}
         </div>
         <button class="rank-delete" data-key="${entry.key}" title="${lang==='en'?'Delete':'削除'}">✕</button>
       `;
-      if(earnedRules.length > 0){
-        row.addEventListener('dblclick', (ev) => {
-          if(ev.target.classList.contains('rank-delete')) return;
-          toggleTitleSelector(row, entry, earnedRules);
-        });
-      }
       listEl.appendChild(row);
     });
   }catch(err){
@@ -3420,55 +3641,6 @@ async function loadTitles(){
     const detail = (err && err.message) ? err.message : String(err);
     listEl.innerHTML = `<div class="rank-empty">${t('rankError')}${detail ? ` (${detail.slice(0,60)})` : ''}</div>`;
   }
-}
-
-function toggleTitleSelector(row, entry, earnedRules){
-  const existing = row.querySelector('.title-selector-panel');
-  if(existing){ existing.remove(); return; }
-  let picked = (entry.selectedTitles || []).filter(id => earnedRules.some(r => r.id === id)).slice(0, 2);
-  const panel = document.createElement('div');
-  panel.className = 'edit-panel title-selector-panel';
-  const renderChips = () => {
-    panel.querySelectorAll('.title-chip').forEach(chip => {
-      chip.classList.toggle('picked', picked.includes(chip.dataset.id));
-    });
-  };
-  panel.innerHTML = `
-    <div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">${lang==='en' ? 'Choose up to 2 to show as tags:' : '表示するタグを最大2個まで選んでください:'}</div>
-    <div class="title-chip-row">
-      ${earnedRules.map(r => `<span class="title-chip" data-id="${r.id}">${escapeHTML(r.label[lang] || r.label.ja)}</span>`).join('')}
-    </div>
-    <button class="edit-save-btn">${lang==='en' ? 'Save selection' : '選択を保存'}</button>
-  `;
-  row.appendChild(panel);
-  renderChips();
-  panel.querySelectorAll('.title-chip').forEach(chip => {
-    chip.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const id = chip.dataset.id;
-      if(picked.includes(id)){
-        picked = picked.filter(x => x !== id);
-      } else if(picked.length < 2){
-        picked.push(id);
-      }
-      renderChips();
-    });
-  });
-  const saveBtn = panel.querySelector('.edit-save-btn');
-  saveBtn.addEventListener('click', async (ev) => {
-    ev.stopPropagation();
-    saveBtn.textContent = lang === 'en' ? 'Saving…' : '保存中…';
-    try{
-      const updated = Object.assign({}, entry, { selectedTitles: picked });
-      await storageRetry(() => window.storage.set(entry.key, JSON.stringify(updated), true));
-      const idx = rankEntriesCache.findIndex(e => e.key === entry.key);
-      if(idx >= 0) rankEntriesCache[idx] = updated;
-      panel.remove();
-      loadTitles();
-    }catch(err){
-      saveBtn.textContent = lang === 'en' ? 'Save failed' : '保存に失敗しました';
-    }
-  });
 }
 
 function getRankTier(rank){
