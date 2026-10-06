@@ -2,22 +2,305 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>能力鑑定団</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="能力鑑定団">
+<meta name="theme-color" content="#a53a35">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#a53a35">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="refresh" content="0; url=./%E8%83%BD%E5%8A%9B%E9%91%91%E5%AE%9A%E5%9B%A3%20v16.html">
-<script>location.replace('./' + encodeURIComponent('能力鑑定団 v16.html'));</script>
-<style>
-  body{font-family:'Zen Kaku Gothic New',sans-serif;background:#f6f0de;color:#5b5544;
-       display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
-  a{color:#a53a35;}
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Kaisei+Decol:wght@500;700&family=Zen+Maru+Gothic:wght@500;700;900&family=Klee+One:wght@600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<p>読み込み中… <a href="./%E8%83%BD%E5%8A%9B%E9%91%91%E5%AE%9A%E5%9B%A3%20v16.html">開かない場合はこちら</a></p>
+<div class="lock-overlay" id="lockOverlay" style="display:none;">
+  <div class="lock-box">
+    <div class="lock-icon">🔒</div>
+    <h2 id="lockTitle">一時停止中</h2>
+    <p id="lockMessage">アクセスが集中したため、安全のため一時的に停止しています。解除コードをお持ちの方は下から解除できます。</p>
+    <div class="lock-unlock-row">
+      <input type="password" id="unlockPin" placeholder="解除コード" inputmode="numeric">
+      <button id="unlockBtn">解除</button>
+    </div>
+    <div class="lock-status" id="unlockStatus"></div>
+  </div>
+</div>
+<div class="confirm-overlay" id="confirmOverlay" style="display:none;">
+  <div class="confirm-box">
+    <p id="confirmMessage"></p>
+    <div class="confirm-btn-row">
+      <button id="confirmCancelBtn" class="confirm-btn confirm-cancel"></button>
+      <button id="confirmOkBtn" class="confirm-btn confirm-ok"></button>
+    </div>
+  </div>
+</div>
+<div class="doc" id="pageCert">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Social Value Appraisal</div>
+    <h1 id="mainTitle">能力鑑定団</h1>
+    <div class="title-divider"></div>
+
+    <div class="participant-row">
+      <span class="participant-label" id="participantLabelEl">同時鑑定人数</span>
+      <div class="participant-btns" id="participantBtns"></div>
+    </div>
+    <div class="person-tabs" id="personTabs" style="display:none;"></div>
+
+    <div class="meta-row">
+      <div class="name-field">
+        <label id="nameLabelEl">鑑定対象者名</label>
+        <input type="text" id="nameInput" placeholder="名前">
+      </div>
+      <div class="date-field" id="dateField"></div>
+    </div>
+
+    <div id="groups"></div>
+
+    <div class="result-section" id="resultSection">
+      <div class="chart-wrap">
+        <div class="chart-stats-row">
+          <svg id="radarSvg" viewBox="0 0 400 400" class="radar-svg"></svg>
+          <div class="level-stats" id="levelStats"></div>
+        </div>
+      </div>
+      <div class="valuation">
+        <div class="label" id="valuationLabelEl">総合鑑定額</div>
+        <div class="amount pending" id="valuationAmount">???</div>
+        <div class="medal-badge" id="medalBadge"></div>
+        <div class="raw" id="rawScore">項目を入力すると自動で鑑定されます</div>
+      </div>
+    </div>
+
+    <div class="save-row">
+      <button id="saveBtn">保存する</button>
+      <button id="resetBtn">リセット</button>
+    </div>
+    <div class="save-status" id="saveStatus"></div>
+
+    <div class="footer-note" id="footerNoteEl">
+      以上、入力項目に基づき社会的価値係数を乗じて算出した結果を<br>ここに鑑定するものである。
+    </div>
+
+    <button class="next-page-btn" id="toRankingBtn" style="display:none;">🏆 みんなの鑑定ランキングを見る →</button>
+
+    <div class="settings-block">
+      <button class="settings-toggle" id="settingsToggle">⚙️ <span id="settingsToggleLabel">設定</span></button>
+      <div class="settings-panel" id="settingsPanel">
+        <div class="account-row" id="accountRow">
+          <span class="settings-label" id="accountLabelEl">アカウント</span>
+          <div class="account-status" id="accountStatus">未ログイン</div>
+          <button class="lang-btn" id="googleLoginBtn">Googleでログイン</button>
+          <button class="lang-btn backup-danger" id="googleLogoutBtn" style="display:none;">ログアウト</button>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label" id="languageLabelEl">言語</span>
+          <div class="settings-lang-btns">
+            <button class="lang-btn active" data-lang="ja" id="langJaBtn">日本語</button>
+            <button class="lang-btn" data-lang="en" id="langEnBtn">English</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label" id="coefFixedLabelEl">係数モード</span>
+          <button class="lang-btn active" id="coefFixedToggleBtn">ON</button>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label" id="coefModeLabelEl">変動係数モード</span>
+          <button class="lang-btn" id="coefModeToggleBtn">OFF</button>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label" id="addAllModeLabelEl">全項目加算モード</span>
+          <button class="lang-btn" id="addAllModeToggleBtn">OFF</button>
+        </div>
+        <div class="settings-row">
+          <span class="settings-label" id="statsLabelEl">閲覧統計</span>
+          <span class="stats-value" id="statsValue">…</span>
+        </div>
+        <div class="backup-row" id="backupRow">
+          <span class="settings-label" id="backupLabelEl">データのバックアップ</span>
+          <div class="backup-btns">
+            <button class="lang-btn" id="exportDataBtn">エクスポート</button>
+            <button class="lang-btn" id="importDataBtn">インポート</button>
+            <button class="lang-btn backup-danger" id="wipeDataBtn">この端末の保存を削除</button>
+          </div>
+          <input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
+          <div class="backup-status" id="backupStatus"></div>
+        </div>
+        <div class="emergency-row">
+          <div class="threshold-row">
+            <span id="thresholdLabelEl">自動停止の基準(1日あたり)</span>
+            <input type="number" id="thresholdInput" min="5" step="5" value="50">
+            <button id="thresholdSaveBtn" style="font-size:11px;">保存</button>
+          </div>
+          <button class="emergency-btn" id="emergencyLockBtn"><span class="stop-dot"></span><span id="emergencyLockText">今すぐ一時停止する</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="doc" id="pageRank" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Ranking</div>
+    <h1 id="rankTitleEl">鑑定ランキング</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="rankSubtitleEl">これまで鑑定された人々の総合鑑定額ランキング</div>
+
+    <div class="rank-note" id="rankNoteEl">※このランキングはこのアプリを使った全員に共有表示されます</div>
+
+    <div class="rank-mode-tabs" id="rankModeTabs"></div>
+
+    <div class="rank-tabs" id="rankTabs"></div>
+
+    <div id="rankingList" class="ranking-list"></div>
+
+    <button class="next-page-btn" id="toTitlesBtn" style="display:none;">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
+    <button class="next-page-btn" id="backBtn" style="display:none;">← 鑑定書に戻る</button>
+  </div>
+</div>
+
+<div class="doc" id="pageTitles" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Titles</div>
+    <h1 id="titlesTitleEl">称号</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="titlesSubtitleEl">鑑定された方々に贈られる称号(新しい順)</div>
+
+    <div class="rank-note" id="titlesNoteEl">※称号の基準は今後追加・更新されていきます</div>
+
+    <div class="rank-mode-tabs" id="titlesTabs"></div>
+
+    <div class="catalog-sort-tabs" id="catalogSortTabs"></div>
+
+    <div class="title-legend" id="titleLegend"></div>
+
+    <div id="titlesList" class="ranking-list"></div>
+
+    <button class="next-page-btn" id="backFromTitlesBtn" style="display:none;">← ランキングに戻る</button>
+  </div>
+</div>
+
+<div class="doc" id="pageCompare" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Compare</div>
+    <h1 id="compareTitleEl">比較</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="compareSubtitleEl">最大6人のレーダーチャートを重ねて比較できます</div>
+
+    <div id="comparePicker" class="compare-picker"></div>
+
+    <div class="chart-wrap"><svg id="compareSvg" viewBox="0 0 400 400" style="width:100%;height:auto;"></svg></div>
+
+    <div id="compareLegend" class="compare-legend"></div>
+    <div id="compareEmpty" class="rank-empty" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="doc" id="pageShare" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Share</div>
+    <h1 id="shareTitleEl">共有</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="shareSubtitleEl">鑑定結果を画像にして共有できます</div>
+
+    <canvas id="shareCanvas" width="800" height="1000" style="width:100%; max-width:400px; display:block; margin:0 auto 16px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.2);"></canvas>
+
+    <button class="next-page-btn" id="shareImageBtn">📤 <span id="shareBtnText">この画像を共有 / 保存</span></button>
+    <div class="rank-note" id="shareNoteEl" style="margin-top:10px;">※お使いの環境によっては「長押しで画像を保存」→LINEに添付、という手順になります</div>
+  </div>
+</div>
+
+<div class="doc" id="pageData" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Data</div>
+    <h1 id="dataTitleEl">データ</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="dataSubtitleEl">参加者全体の統計</div>
+
+    <div id="dataContent"></div>
+  </div>
+</div>
+
+<div class="doc" id="pageMyPage" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">My Page</div>
+    <h1 id="mypageTitleEl">マイページ</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="mypageSubtitleEl">自分のプロフィールを記録します</div>
+
+    <div id="mypageRoot"></div>
+  </div>
+</div>
+
+<div class="doc" id="pageFriends" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Friends</div>
+    <h1 id="friendsTitleEl">フレンド</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="friendsSubtitleEl">フレンドの申請・承認・管理を行います</div>
+
+    <div id="friendsPageRoot"></div>
+  </div>
+</div>
+
+<nav class="bottom-nav" id="bottomNav">
+  <button class="bottom-nav-btn" data-page="cert" id="navHomeBtn">
+    <span class="bn-icon">🏠</span><span class="bn-label" id="navHomeLabel">ホーム</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="rank" id="navRankBtn">
+    <span class="bn-icon">🏆</span><span class="bn-label" id="navRankLabel">ランキング</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="compare" id="navCompareBtn">
+    <span class="bn-icon">⚔️</span><span class="bn-label" id="navCompareLabel">比較</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="titles" id="navTitlesBtn">
+    <span class="bn-icon">🎖️</span><span class="bn-label" id="navTitlesLabel">称号</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="share" id="navShareBtn">
+    <span class="bn-icon">📤</span><span class="bn-label" id="navShareLabel">共有</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="data" id="navDataBtn">
+    <span class="bn-icon">📊</span><span class="bn-label" id="navDataLabel">データ</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="mypage" id="navMypageBtn">
+    <span class="bn-icon">🪪</span><span class="bn-label" id="navMypageLabel">マイページ</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="friends" id="navFriendsBtn">
+    <span class="bn-icon">👥</span><span class="bn-label" id="navFriendsLabel">フレンド</span>
+  </button>
+</nav>
+
+<div class="lvl-tooltip" id="lvlTooltip"></div>
+
+
+<canvas id="fireworksCanvas"></canvas>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+<script src="app.js"></script>
 </body>
 </html>
