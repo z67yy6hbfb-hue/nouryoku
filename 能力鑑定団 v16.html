@@ -570,6 +570,21 @@
   }
   .mp-chip.mp-chip-mbti.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); box-shadow:0 3px 8px rgba(47,125,209,0.35);}
   .mp-chip.mp-chip-tag.active{background:linear-gradient(135deg, var(--teal), var(--teal-deep)); box-shadow:0 3px 8px rgba(79,125,120,0.35);}
+  .mp-mbti-result{
+    display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+    padding:10px 12px; margin-bottom:12px; border-radius:10px;
+    background:color-mix(in srgb, #2f7dd1 8%, var(--paper));
+    border:1px dashed color-mix(in srgb, #2f7dd1 35%, var(--line));
+  }
+  .mp-mbti-badge{font-family:'Zen Maru Gothic', sans-serif; font-weight:800; font-size:15px; color:#1d5fa8;}
+  .mp-mbti-badge-name{font-size:12.5px; font-weight:700; color:var(--ink);}
+  .mp-mbti-badge-empty{font-size:11px; color:var(--ink-soft);}
+  .mp-chip-group-mbti16{gap:7px 7px;}
+  .mp-chip-group-mbti16 .mp-chip{
+    display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1.2;
+    padding:7px 11px;
+  }
+  .mp-chip-sub{font-size:9px; font-weight:600; opacity:0.75; letter-spacing:0.03em;}
   .mp-save-bar{display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 0 4px;}
   .mp-save-btn{
     font-family:'Zen Maru Gothic', sans-serif; font-weight:800; font-size:14px; padding:11px 32px;
@@ -1288,6 +1303,16 @@ const MBTI_AXES = [
   { key:'TF', label:'思考(T) / 感情(F)', options:[{v:'T',l:'思考 T'},{v:'F',l:'感情 F'}] },
   { key:'JP', label:'判断(J) / 探索(P)', options:[{v:'J',l:'判断 J'},{v:'P',l:'探索 P'}] },
 ];
+const MBTI_TYPES = [
+  {code:'INTJ', name:'建築家'}, {code:'INTP', name:'論理学者'}, {code:'ENTJ', name:'指揮官'}, {code:'ENTP', name:'討論者'},
+  {code:'INFJ', name:'提唱者'}, {code:'INFP', name:'仲介者'}, {code:'ENFJ', name:'主人公'}, {code:'ENFP', name:'広報運動家'},
+  {code:'ISTJ', name:'管理者'}, {code:'ISFJ', name:'擁護者'}, {code:'ESTJ', name:'幹部'}, {code:'ESFJ', name:'領事官'},
+  {code:'ISTP', name:'巨匠'}, {code:'ISFP', name:'冒険家'}, {code:'ESTP', name:'起業家'}, {code:'ESFP', name:'エンターテイナー'},
+];
+function currentMbtiCode(mbti){
+  if(!mbti || !mbti.EI || !mbti.SN || !mbti.TF || !mbti.JP) return null;
+  return mbti.EI + mbti.SN + mbti.TF + mbti.JP;
+}
 const ACTIVITY_CATEGORY_OPTIONS = [
   {v:'sports_team', l:'運動部(体育会系)'}, {v:'arts_music', l:'芸術・音楽系'}, {v:'culture_academic', l:'文化部・学術系'},
   {v:'outdoor', l:'アウトドア'}, {v:'gaming_esports', l:'ゲーム・eスポーツ'}, {v:'volunteer', l:'ボランティア・社会活動'},
@@ -1396,6 +1421,17 @@ function renderMyPageUI(){
 
     <div class="mp-card">
       <div class="mp-card-title"><span class="mp-card-icon">🧭</span>性格タイプ（MBTI）</div>
+      ${(() => {
+        const code = currentMbtiCode(myProfileAttrs.mbti);
+        const matched = code ? MBTI_TYPES.find(mt => mt.code === code) : null;
+        return `<div class="mp-mbti-result">${matched
+          ? `<span class="mp-mbti-badge">${matched.code}</span><span class="mp-mbti-badge-name">${matched.name}</span>`
+          : `<span class="mp-mbti-badge-empty">4つの軸を選ぶ、またはタイプ名から選ぶと表示されます</span>`}</div>`;
+      })()}
+      <div class="mp-field">
+        <span class="mp-field-label">タイプ名から選ぶ</span>
+        <div class="mp-chip-group mp-chip-group-mbti16" data-mbti16>${MBTI_TYPES.map(mt => `<button type="button" class="mp-chip mp-chip-mbti${currentMbtiCode(myProfileAttrs.mbti) === mt.code ? ' active' : ''}" data-code="${mt.code}">${mt.name}<span class="mp-chip-sub">${mt.code}</span></button>`).join('')}</div>
+      </div>
       ${MBTI_AXES.map(axis => `<div class="mp-field">
         <span class="mp-field-label">${axis.label}</span>
         <div class="mp-chip-group mp-chip-group-mbti" data-mbti-axis="${axis.key}">${chipButtonsHTML(axis.options, myProfileAttrs.mbti[axis.key], 'mp-chip-mbti')}</div>
@@ -1440,6 +1476,19 @@ function renderMyPageUI(){
         myProfileAttrs.mbti[axisKey] = (myProfileAttrs.mbti[axisKey] === v) ? null : v;
         renderMyPageUI();
       });
+    });
+  });
+  const mbti16Group = root.querySelector('.mp-chip-group[data-mbti16]');
+  if(mbti16Group) mbti16Group.querySelectorAll('.mp-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.dataset.code;
+      const isActive = currentMbtiCode(myProfileAttrs.mbti) === code;
+      if(isActive){
+        myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
+      } else {
+        myProfileAttrs.mbti = { EI: code[0], SN: code[1], TF: code[2], JP: code[3] };
+      }
+      renderMyPageUI();
     });
   });
   const nicknameInput = document.getElementById('nicknameInput');
