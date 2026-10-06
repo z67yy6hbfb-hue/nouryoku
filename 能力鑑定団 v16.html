@@ -568,7 +568,6 @@
     background:linear-gradient(135deg, var(--red), var(--red-deep)); border-color:transparent; color:#fff;
     font-weight:700; box-shadow:0 3px 8px rgba(165,58,53,0.35); transform:translateY(-1px);
   }
-  .mp-chip.mp-chip-mbti.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); box-shadow:0 3px 8px rgba(47,125,209,0.35);}
   .mp-chip.mp-chip-tag.active{background:linear-gradient(135deg, var(--teal), var(--teal-deep)); box-shadow:0 3px 8px rgba(79,125,120,0.35);}
   .mp-mbti-result{
     display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
@@ -576,14 +575,44 @@
     background:color-mix(in srgb, #2f7dd1 8%, var(--paper));
     border:1px dashed color-mix(in srgb, #2f7dd1 35%, var(--line));
   }
+  .mp-mbti-result.group-analyst{background:color-mix(in srgb, #6a4fb0 8%, var(--paper)); border-color:color-mix(in srgb, #6a4fb0 35%, var(--line));}
+  .mp-mbti-result.group-diplomat{background:color-mix(in srgb, var(--teal) 8%, var(--paper)); border-color:color-mix(in srgb, var(--teal) 35%, var(--line));}
+  .mp-mbti-result.group-sentinel{background:color-mix(in srgb, #2f7dd1 8%, var(--paper)); border-color:color-mix(in srgb, #2f7dd1 35%, var(--line));}
+  .mp-mbti-result.group-explorer{background:color-mix(in srgb, var(--gold) 8%, var(--paper)); border-color:color-mix(in srgb, var(--gold) 35%, var(--line));}
   .mp-mbti-badge{font-family:'Zen Maru Gothic', sans-serif; font-weight:800; font-size:15px; color:#1d5fa8;}
+  .mp-mbti-result.group-analyst .mp-mbti-badge{color:#6a4fb0;}
+  .mp-mbti-result.group-diplomat .mp-mbti-badge{color:var(--teal-deep);}
+  .mp-mbti-result.group-sentinel .mp-mbti-badge{color:#1d5fa8;}
+  .mp-mbti-result.group-explorer .mp-mbti-badge{color:var(--gold-deep);}
   .mp-mbti-badge-name{font-size:12.5px; font-weight:700; color:var(--ink);}
   .mp-mbti-badge-empty{font-size:11px; color:var(--ink-soft);}
-  .mp-chip-group-mbti16{gap:7px 7px;}
-  .mp-chip-group-mbti16 .mp-chip{
-    display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1.2;
-    padding:7px 11px;
+  .mp-mbti-axes-compact{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+  .mp-mbti-axis-pair{display:flex; border:1.5px solid var(--line); border-radius:10px; overflow:hidden;}
+  .mp-mbti-axis-btn{
+    font-size:12px; padding:7px 12px; border:none; background:var(--paper); color:var(--ink-soft);
+    cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif; font-weight:700;
+    transition:background .12s, color .12s;
   }
+  .mp-mbti-axis-btn:not(:last-child){border-right:1.5px solid var(--line);}
+  .mp-mbti-axis-btn:hover{color:var(--ink);}
+  .mp-mbti-axis-btn.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); color:#fff;}
+  .mp-chip-group-mbti16{gap:7px 7px;}
+  .mp-chip16{
+    font-size:12px; padding:7px 11px; border-radius:16px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink-soft); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:600; transition:transform .12s, box-shadow .12s, background .12s, color .12s, border-color .12s;
+    display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1.2;
+  }
+  .mp-chip16:hover{border-color:var(--red); color:var(--ink);}
+  .mp-chip16.group-analyst:hover{border-color:#6a4fb0;}
+  .mp-chip16.group-diplomat:hover{border-color:var(--teal);}
+  .mp-chip16.group-sentinel:hover{border-color:#2f7dd1;}
+  .mp-chip16.group-explorer:hover{border-color:var(--gold);}
+  .mp-chip16.active{color:#fff; border-color:transparent; font-weight:700; transform:translateY(-1px);}
+  .mp-chip16.group-analyst.active{background:linear-gradient(135deg, #8a6fd4, #6a4fb0); box-shadow:0 3px 8px rgba(106,79,176,0.35);}
+  .mp-chip16.group-diplomat.active{background:linear-gradient(135deg, var(--teal), var(--teal-deep)); box-shadow:0 3px 8px rgba(79,125,120,0.35);}
+  .mp-chip16.group-sentinel.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); box-shadow:0 3px 8px rgba(47,125,209,0.35);}
+  .mp-chip16.group-explorer.active{background:linear-gradient(135deg, var(--gold), var(--gold-deep)); box-shadow:0 3px 8px rgba(182,146,60,0.35);}
   .mp-chip-sub{font-size:9px; font-weight:600; opacity:0.75; letter-spacing:0.03em;}
   .mp-save-bar{display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 0 4px;}
   .mp-save-btn{
@@ -1304,10 +1333,10 @@ const MBTI_AXES = [
   { key:'JP', label:'判断(J) / 探索(P)', options:[{v:'J',l:'判断 J'},{v:'P',l:'探索 P'}] },
 ];
 const MBTI_TYPES = [
-  {code:'INTJ', name:'建築家'}, {code:'INTP', name:'論理学者'}, {code:'ENTJ', name:'指揮官'}, {code:'ENTP', name:'討論者'},
-  {code:'INFJ', name:'提唱者'}, {code:'INFP', name:'仲介者'}, {code:'ENFJ', name:'主人公'}, {code:'ENFP', name:'広報運動家'},
-  {code:'ISTJ', name:'管理者'}, {code:'ISFJ', name:'擁護者'}, {code:'ESTJ', name:'幹部'}, {code:'ESFJ', name:'領事官'},
-  {code:'ISTP', name:'巨匠'}, {code:'ISFP', name:'冒険家'}, {code:'ESTP', name:'起業家'}, {code:'ESFP', name:'エンターテイナー'},
+  {code:'INTJ', name:'建築家', group:'analyst'}, {code:'INTP', name:'論理学者', group:'analyst'}, {code:'ENTJ', name:'指揮官', group:'analyst'}, {code:'ENTP', name:'討論者', group:'analyst'},
+  {code:'INFJ', name:'提唱者', group:'diplomat'}, {code:'INFP', name:'仲介者', group:'diplomat'}, {code:'ENFJ', name:'主人公', group:'diplomat'}, {code:'ENFP', name:'広報運動家', group:'diplomat'},
+  {code:'ISTJ', name:'管理者', group:'sentinel'}, {code:'ISFJ', name:'擁護者', group:'sentinel'}, {code:'ESTJ', name:'幹部', group:'sentinel'}, {code:'ESFJ', name:'領事官', group:'sentinel'},
+  {code:'ISTP', name:'巨匠', group:'explorer'}, {code:'ISFP', name:'冒険家', group:'explorer'}, {code:'ESTP', name:'起業家', group:'explorer'}, {code:'ESFP', name:'エンターテイナー', group:'explorer'},
 ];
 function currentMbtiCode(mbti){
   if(!mbti || !mbti.EI || !mbti.SN || !mbti.TF || !mbti.JP) return null;
@@ -1424,18 +1453,14 @@ function renderMyPageUI(){
       ${(() => {
         const code = currentMbtiCode(myProfileAttrs.mbti);
         const matched = code ? MBTI_TYPES.find(mt => mt.code === code) : null;
-        return `<div class="mp-mbti-result">${matched
+        return `<div class="mp-mbti-result${matched ? ' group-' + matched.group : ''}">${matched
           ? `<span class="mp-mbti-badge">${matched.code}</span><span class="mp-mbti-badge-name">${matched.name}</span>`
-          : `<span class="mp-mbti-badge-empty">4つの軸を選ぶ、またはタイプ名から選ぶと表示されます</span>`}</div>`;
+          : `<span class="mp-mbti-badge-empty">タイプ、または軸を選ぶと表示されます</span>`}</div>`;
       })()}
-      <div class="mp-field">
-        <span class="mp-field-label">タイプ名から選ぶ</span>
-        <div class="mp-chip-group mp-chip-group-mbti16" data-mbti16>${MBTI_TYPES.map(mt => `<button type="button" class="mp-chip mp-chip-mbti${currentMbtiCode(myProfileAttrs.mbti) === mt.code ? ' active' : ''}" data-code="${mt.code}">${mt.name}<span class="mp-chip-sub">${mt.code}</span></button>`).join('')}</div>
+      <div class="mp-mbti-axes-compact">
+        ${MBTI_AXES.map(axis => `<div class="mp-mbti-axis-pair" data-mbti-axis="${axis.key}">${axis.options.map(o => `<button type="button" class="mp-mbti-axis-btn${myProfileAttrs.mbti[axis.key] === o.v ? ' active' : ''}" data-value="${o.v}" title="${o.l}">${o.v}</button>`).join('')}</div>`).join('')}
       </div>
-      ${MBTI_AXES.map(axis => `<div class="mp-field">
-        <span class="mp-field-label">${axis.label}</span>
-        <div class="mp-chip-group mp-chip-group-mbti" data-mbti-axis="${axis.key}">${chipButtonsHTML(axis.options, myProfileAttrs.mbti[axis.key], 'mp-chip-mbti')}</div>
-      </div>`).join('')}
+      <div class="mp-chip-group mp-chip-group-mbti16" data-mbti16>${MBTI_TYPES.map(mt => `<button type="button" class="mp-chip16 group-${mt.group}${currentMbtiCode(myProfileAttrs.mbti) === mt.code ? ' active' : ''}" data-code="${mt.code}">${mt.name}<span class="mp-chip-sub">${mt.code}</span></button>`).join('')}</div>
     </div>
 
     <div class="mp-card">
@@ -1468,9 +1493,9 @@ function renderMyPageUI(){
       });
     });
   });
-  root.querySelectorAll('.mp-chip-group[data-mbti-axis]').forEach(group => {
-    const axisKey = group.dataset.mbtiAxis;
-    group.querySelectorAll('.mp-chip').forEach(btn => {
+  root.querySelectorAll('.mp-mbti-axis-pair[data-mbti-axis]').forEach(pair => {
+    const axisKey = pair.dataset.mbtiAxis;
+    pair.querySelectorAll('.mp-mbti-axis-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const v = btn.dataset.value;
         myProfileAttrs.mbti[axisKey] = (myProfileAttrs.mbti[axisKey] === v) ? null : v;
@@ -1479,7 +1504,7 @@ function renderMyPageUI(){
     });
   });
   const mbti16Group = root.querySelector('.mp-chip-group[data-mbti16]');
-  if(mbti16Group) mbti16Group.querySelectorAll('.mp-chip').forEach(btn => {
+  if(mbti16Group) mbti16Group.querySelectorAll('.mp-chip16').forEach(btn => {
     btn.addEventListener('click', () => {
       const code = btn.dataset.code;
       const isActive = currentMbtiCode(myProfileAttrs.mbti) === code;
