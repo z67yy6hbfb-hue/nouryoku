@@ -117,6 +117,11 @@ if(firebaseAuth){
     updateAccountUI();
     if(user){
       try{ await loadState(); }catch(err){ console.warn('loadState after sign-in failed:', err); }
+      if(!reviewerName){
+        reviewerName = user.displayName || user.email || '';
+        const reviewerInput = document.getElementById('reviewerInput');
+        if(reviewerInput) reviewerInput.value = reviewerName;
+      }
       try{ await ensureEmailIndex(user); }catch(err){ console.warn('ensureEmailIndex failed:', err); }
       try{ await loadMyProfileAttributes(); }catch(err){ console.warn('loadMyProfileAttributes failed:', err); }
     }
@@ -124,11 +129,14 @@ if(firebaseAuth){
 }
 
 let lang = 'ja';
+let reviewerName = '';
 
 const UI_TEXT = {
   title: { ja:'能力鑑定団', en:'Ability Appraisal Guild' },
   nameLabel: { ja:'鑑定対象者名', en:'Name' },
   namePlaceholder: { ja:'名前', en:'Name' },
+  reviewerLabel: { ja:'鑑定者', en:'Appraiser' },
+  reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -532,14 +540,14 @@ async function syncAssessmentsToFirestore(){
       ? upsertAssessment(selfAssessmentDocId(myUid), {
           authorUid: myUid, targetUid: myUid, kind: 'self', visibility: 'friends',
           entries: entriesSnapshot, total, groupTotals: totals,
-          reviewerDisplayName: firebaseUser.displayName || firebaseUser.email || '',
+          reviewerDisplayName: reviewerName || firebaseUser.displayName || firebaseUser.email || '',
         })
       : upsertAssessment(peerAssessmentDocId(myUid, i), {
           authorUid: myUid, kind: 'peer', visibility: 'friends',
           targetNameRaw: p.name.trim(),
           entries: entriesSnapshot, total, groupTotals: totals,
           reviewerAttributesSnapshot: myProfileAttrs || {},
-          reviewerDisplayName: firebaseUser.displayName || firebaseUser.email || '',
+          reviewerDisplayName: reviewerName || firebaseUser.displayName || firebaseUser.email || '',
         });
     tasks.push(task.catch(err => console.warn('assessments sync failed for slot', i, err)));
   }
@@ -1801,6 +1809,9 @@ document.addEventListener('input', (e) => {
     state.name = e.target.value;
     updateActiveTabLabel();
   }
+  if(e.target.id === 'reviewerInput'){
+    reviewerName = e.target.value;
+  }
 });
 
 let radarValues = GROUPS.map(() => 0);
@@ -2203,7 +2214,8 @@ async function saveState(){
       participantCount: participantCount,
       variableCoefMode: variableCoefMode,
       coefMode: coefMode,
-      addAllMode: addAllMode
+      addAllMode: addAllMode,
+      reviewerName: reviewerName
     })));
     personalOk = true;
   }catch(err){
@@ -2286,6 +2298,9 @@ async function loadState(){
     const res = await window.storage.get('kantei-state');
     if(res && res.value){
       const loaded = JSON.parse(res.value);
+      if(typeof loaded.reviewerName === 'string'){
+        reviewerName = loaded.reviewerName;
+      }
       if(loaded.profiles && Array.isArray(loaded.profiles)){
         for(let i = 0; i < 6; i++){
           if(loaded.profiles[i]){
@@ -4053,6 +4068,7 @@ function switchProfile(idx){
 
 function syncDOMFromState(){
   document.getElementById('nameInput').value = state.name || '';
+  document.getElementById('reviewerInput').value = reviewerName || '';
   document.querySelectorAll('.row').forEach(row => {
     const id = row.dataset.id;
     const entry = state.entries[id];
@@ -4077,6 +4093,8 @@ function applyStaticTranslations(){
   document.getElementById('participantLabelEl').textContent = t('participantLabel');
   document.getElementById('nameLabelEl').textContent = t('nameLabel');
   document.getElementById('nameInput').placeholder = t('namePlaceholder');
+  document.getElementById('reviewerLabelEl').textContent = t('reviewerLabel');
+  document.getElementById('reviewerInput').placeholder = t('reviewerPlaceholder');
   document.getElementById('valuationLabelEl').textContent = t('valuationLabel');
   document.getElementById('saveBtn').textContent = t('save');
   document.getElementById('resetBtn').textContent = t('reset');
