@@ -3336,6 +3336,16 @@ function totalItemsAtLeastAcrossAll(entry, minLevelKey){
   });
   return count;
 }
+function itemAtLeast(entry, groupIndex, itemName, minLevelKey){
+  if(!entry || !entry.levelSnapshot) return false;
+  const minIdx = LEVEL_ORDER.indexOf(minLevelKey);
+  return groupLeafItems(groupIndex).some(leaf => leaf.name === itemName && LEVEL_ORDER.indexOf(entry.levelSnapshot[leaf.id]) >= minIdx);
+}
+function categoryAnyItemAtLeast(entry, groupIndex, minLevelKey){
+  if(!entry || !entry.levelSnapshot) return false;
+  const minIdx = LEVEL_ORDER.indexOf(minLevelKey);
+  return groupLeafItems(groupIndex).some(leaf => LEVEL_ORDER.indexOf(entry.levelSnapshot[leaf.id]) >= minIdx);
+}
 
 const TITLE_RULES = [
   {
@@ -3759,60 +3769,154 @@ const TITLE_RULES = [
     test: (entry) => itemTierExact(entry, GROUP_IDX.life, nameIn(['DIY・修理']), 'extreme'),
   },
   {
+    id: 'academics_t7',
+    label: { ja:'🎖️ 知識人', en:'🎖️ Knowledgeable' },
+    desc: { ja:'学問・知識の合計スコアが7点以上', en:'Academics & Knowledge category total reaches 7 points' },
+    category: 'academics', rarity: 3, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.academics, 7),
+  },
+  {
     id: 'zunomeiseki',
     label: { ja:'🎖️ 頭脳明晰', en:'🎖️ Brilliant Mind' },
     desc: { ja:'学問・知識の合計スコアが10点以上', en:'Academics & Knowledge category total reaches 10 points' },
-    category: 'academics', rarity: 4, conditional: true,
+    category: 'academics', rarity: 4, conditional: true, evolvesFrom: 'academics_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.academics, 10),
+  },
+  {
+    id: 'sports_t7',
+    label: { ja:'🎖️ 運動センス', en:'🎖️ Athletic Sense' },
+    desc: { ja:'スポーツ・身体能力の合計スコアが7点以上', en:'Sports & Physical category total reaches 7 points' },
+    category: 'sports', rarity: 3, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.sports, 7),
   },
   {
     id: 'sportsbannou',
     label: { ja:'🎖️ 運動神経抜群', en:'🎖️ Natural Athlete' },
     desc: { ja:'スポーツ・身体能力の合計スコアが10点以上', en:'Sports & Physical category total reaches 10 points' },
-    category: 'sports', rarity: 4, conditional: true,
+    category: 'sports', rarity: 4, conditional: true, evolvesFrom: 'sports_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.sports, 10),
+  },
+  {
+    id: 'arts_t4',
+    label: { ja:'🎖️ 芸術経験者', en:'🎖️ Arts Experienced' },
+    desc: { ja:'芸術・表現の合計スコアが4点以上', en:'Arts & Expression category total reaches 4 points' },
+    category: 'arts', rarity: 1, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.arts, 4),
+  },
+  {
+    id: 'arts_t7',
+    label: { ja:'🎖️ 芸術肌', en:'🎖️ Artistic Spirit' },
+    desc: { ja:'芸術・表現の合計スコアが7点以上', en:'Arts & Expression category total reaches 7 points' },
+    category: 'arts', rarity: 3, conditional: true, evolvesFrom: 'arts_t4',
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.arts, 7),
   },
   {
     id: 'artsense',
     label: { ja:'🎖️ 芸術家', en:'🎖️ Artist' },
     desc: { ja:'芸術・表現の合計スコアが10点以上', en:'Arts & Expression category total reaches 10 points' },
-    category: 'arts', rarity: 4, conditional: true,
+    category: 'arts', rarity: 4, conditional: true, evolvesFrom: 'arts_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.arts, 10),
+  },
+  {
+    id: 'craft_t4',
+    label: { ja:'🎖️ 工作', en:'🎖️ Tinkerer' },
+    desc: { ja:'技術・ものづくりの合計スコアが4点以上', en:'Craft & Engineering category total reaches 4 points' },
+    category: 'craft', rarity: 1, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.craft, 4),
+  },
+  {
+    id: 'craft_t7',
+    label: { ja:'🎖️ クラフター', en:'🎖️ Crafter' },
+    desc: { ja:'技術・ものづくりの合計スコアが7点以上', en:'Craft & Engineering category total reaches 7 points' },
+    category: 'craft', rarity: 3, conditional: true, evolvesFrom: 'craft_t4',
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.craft, 7),
   },
   {
     id: 'kiyozubatsugun',
     label: { ja:'🎖️ 多才クラフター', en:'🎖️ Versatile Crafter' },
     desc: { ja:'技術・ものづくりの合計スコアが10点以上', en:'Craft & Engineering category total reaches 10 points' },
-    category: 'craft', rarity: 4, conditional: true,
+    category: 'craft', rarity: 4, conditional: true, evolvesFrom: 'craft_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.craft, 10),
+  },
+  {
+    id: 'life_t4',
+    label: { ja:'🎖️ 生活力', en:'🎖️ Life Skills' },
+    desc: { ja:'実用生活の合計スコアが4点以上', en:'Life & Practical category total reaches 4 points' },
+    category: 'life', rarity: 1, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.life, 4),
+  },
+  {
+    id: 'life_t7',
+    label: { ja:'🎖️ 生活巧者', en:'🎖️ Life-Savvy' },
+    desc: { ja:'実用生活の合計スコアが7点以上', en:'Life & Practical category total reaches 7 points' },
+    category: 'life', rarity: 3, conditional: true, evolvesFrom: 'life_t4',
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.life, 7),
   },
   {
     id: 'seikatsuryokubatsugun',
     label: { ja:'🎖️ 生活強者', en:'🎖️ Life Powerhouse' },
     desc: { ja:'実用生活の合計スコアが10点以上', en:'Life & Practical category total reaches 10 points' },
-    category: 'life', rarity: 4, conditional: true,
+    category: 'life', rarity: 4, conditional: true, evolvesFrom: 'life_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.life, 10),
+  },
+  {
+    id: 'games_t7',
+    label: { ja:'🎖️ ゲーマー', en:'🎖️ Gamer' },
+    desc: { ja:'ゲームの合計スコアが7点以上', en:'Games category total reaches 7 points' },
+    category: 'games', rarity: 3, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.games, 7),
   },
   {
     id: 'gamesensebatsugun',
     label: { ja:'🎖️ ゲームセンス', en:'🎖️ Game Sense' },
     desc: { ja:'ゲームの合計スコアが10点以上', en:'Games category total reaches 10 points' },
-    category: 'games', rarity: 4, conditional: true,
+    category: 'games', rarity: 4, conditional: true, evolvesFrom: 'games_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.games, 10),
+  },
+  {
+    id: 'social_t7',
+    label: { ja:'🎖️ 世渡り上手', en:'🎖️ Socially Savvy' },
+    desc: { ja:'対人・コミュニケーションの合計スコアが7点以上', en:'Interpersonal & Communication category total reaches 7 points' },
+    category: 'social', rarity: 3, conditional: true,
+    test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.social, 7),
   },
   {
     id: 'shakosebatsugun',
     label: { ja:'🎖️ 愛され上手', en:'🎖️ Everyone\'s Favorite' },
     desc: { ja:'対人・コミュニケーションの合計スコアが10点以上', en:'Interpersonal & Communication category total reaches 10 points' },
-    category: 'social', rarity: 4, conditional: true,
+    category: 'social', rarity: 4, conditional: true, evolvesFrom: 'social_t7',
     test: (entry) => categoryTotalAtLeast(entry, GROUP_IDX.social, 10),
   },
   {
     id: 'entertainer',
-    label: { ja:'🎖️ エンターテイナー', en:'🎖️ Entertainer Fusion' },
+    label: { ja:'🎖️ エンターテイナー', en:'🎖️ Entertainer' },
+    desc: { ja:'ユーモアが「中級者」以上、かつノリ・場適応が「中上級者」以上', en:'Humor at Intermediate or higher, and Vibe & Situational Fit at Inter-Advanced or higher' },
     category: 'fusion', rarity: 2, conditional: true,
-    combo: ['ensouka', 'performer'],
-    test: () => false,
+    test: (entry) => itemAtLeast(entry, GROUP_IDX.social, 'ユーモア', 'intermediate')
+      && itemAtLeast(entry, GROUP_IDX.social, 'ノリ・場適応', 'inter_advanced'),
+  },
+  {
+    id: 'engineer_title',
+    label: { ja:'🎖️ エンジニア', en:'🎖️ Engineer' },
+    desc: { ja:'プログラミングが「中上級者」以上、かつCAD・設計が「中級者」以上', en:'Programming at Inter-Advanced or higher, and CAD/Design at Intermediate or higher' },
+    category: 'fusion', rarity: 2, conditional: true,
+    test: (entry) => itemAtLeast(entry, GROUP_IDX.craft, 'プログラミング', 'inter_advanced')
+      && itemAtLeast(entry, GROUP_IDX.craft, 'CAD・設計', 'intermediate'),
+  },
+  {
+    id: 'musician_title',
+    label: { ja:'🎖️ 音楽家', en:'🎖️ Musician' },
+    desc: { ja:'歌唱が「中上級者」以上、かつ楽器演奏が「中上級者」以上', en:'Singing at Inter-Advanced or higher, and Playing an Instrument at Inter-Advanced or higher' },
+    category: 'fusion', rarity: 2, conditional: true,
+    test: (entry) => itemAtLeast(entry, GROUP_IDX.arts, '歌唱', 'inter_advanced')
+      && itemAtLeast(entry, GROUP_IDX.arts, '楽器演奏', 'inter_advanced'),
+  },
+  {
+    id: 'kyoyojin',
+    label: { ja:'🎖️ 教養人', en:'🎖️ Well-Read' },
+    desc: { ja:'学問・知識のいずれかの項目で「中級者」以上に到達', en:'Reach Intermediate level or higher in any academics item' },
+    category: 'fusion', rarity: 2, conditional: true,
+    test: (entry) => categoryAnyItemAtLeast(entry, GROUP_IDX.academics, 'intermediate'),
   },
   {
     id: 'dousatsusha',
