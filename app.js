@@ -290,8 +290,6 @@ const SEGMENT_PREDICATES = {
   science_grad: attrs => attrs.educationCategory === 'science_grad',
   humanities_grad: attrs => attrs.educationCategory === 'humanities_grad',
 };
-const K_ANON_THRESHOLD = 2; // この人数以下は内訳を隠し、平均値のみ表示する
-
 function emailIndexId(email){ return (email || '').trim().toLowerCase().replace(/[^a-z0-9@._-]/g, ''); }
 
 async function ensureEmailIndex(user){
@@ -599,19 +597,17 @@ function aggregatePeerAssessments(assessments, options){
     return segmentKeys.every(key => (SEGMENT_PREDICATES[key] ? SEGMENT_PREDICATES[key](attrs) : true));
   });
   const count = filtered.length;
-  if(count === 0) return { count: 0, average: null, distribution: null, breakdown: null, lowSample: false };
+  if(count === 0) return { count: 0, average: null, distribution: null, breakdown: null };
   const average = filtered.reduce((sum, a) => sum + a.total, 0) / count;
-  const lowSample = count <= K_ANON_THRESHOLD;
   return {
     count,
     average,
-    distribution: lowSample ? null : buildHistogram(filtered.map(a => a.total)),
-    breakdown: lowSample ? null : filtered.map((a, i) => ({
+    distribution: buildHistogram(filtered.map(a => a.total)),
+    breakdown: filtered.map((a, i) => ({
       reviewerUid: a.authorUid,
       label: anonymous ? `フレンド${String.fromCharCode(65 + i)}` : (a.reviewerDisplayName || '不明'),
       total: a.total,
     })),
-    lowSample,
   };
 }
 function buildHistogram(totals, binSize){
@@ -919,9 +915,7 @@ function renderPeerResult(resultId, result){
   if(!el) return;
   if(result.count === 0){ el.innerHTML = '該当する評価がありません（算入にチェックを入れてください）'; return; }
   let html = `<p>対象人数: ${result.count}人 / 平均: ${result.average.toFixed(1)}pt</p>`;
-  html += result.lowSample
-    ? '<p style="font-size:11px; color:var(--ink-soft);">※人数が少ないため内訳は非表示です（平均値のみ表示）</p>'
-    : '<ul style="padding-left:18px; margin:4px 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
+  html += '<ul style="padding-left:18px; margin:4px 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
   el.innerHTML = html;
 }
 
