@@ -137,6 +137,7 @@ const UI_TEXT = {
   namePlaceholder: { ja:'名前', en:'Name' },
   reviewerLabel: { ja:'鑑定者', en:'Appraiser' },
   reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
+  reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -2241,6 +2242,7 @@ async function saveState(){
         groupTotals: totals,
         date: new Date().toISOString(),
         mode: saveMode,
+        reviewerName: reviewerName || (firebaseUser && (firebaseUser.displayName || firebaseUser.email)) || '',
       };
       const levelSnapshot = {};
       Object.keys(p.entries).forEach(id => { levelSnapshot[id] = p.entries[id].level; });
@@ -3745,7 +3747,7 @@ function renderRankingList(mode){
       row.innerHTML = `
         <div class="rank-info">
           <div class="rank-name">${escapeHTML(entry.name || t('anon'))}</div>
-          <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')} · ${lang==='en'?'double-tap to view coefficients':'ダブルタップで係数を確認'}</div>
+          <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}` : ''} · ${lang==='en'?'double-tap to view coefficients':'ダブルタップで係数を確認'}</div>
         </div>
         <button class="rank-delete" data-key="${entry.key}" title="${lang==='en'?'Delete':'削除'}">✕</button>
       `;
@@ -3787,7 +3789,7 @@ function renderRankingList(mode){
       <div class="rank-badge ${badgeClass}${popClass}" style="animation-delay:${popDelay}s">${medalEmoji || rank}</div>
       <div class="rank-info">
         <div class="rank-name"><span class="tier-badge tier-${tier.key}">${tier.label}</span>${escapeHTML(entry.name || t('anon'))}${editable ? ` <span style="font-size:10px;color:var(--ink-soft);">(${lang==='en'?'double-tap to edit':'ダブルタップで編集'})</span>` : ''}</div>
-        <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}</div>
+        <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}` : ''}</div>
       </div>
       <div class="rank-amount">${value}</div>
       <button class="rank-delete" data-key="${entry.key}" title="${lang==='en'?'Delete':'削除'}">✕</button>
