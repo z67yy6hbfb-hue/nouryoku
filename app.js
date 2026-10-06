@@ -146,6 +146,8 @@ const UI_TEXT = {
   othersAssessedOthersTitle: { ja:'他人が他人を鑑定（インターネット）', en:'Others Assessed Others (Internet)' },
   detailBtn: { ja:'詳細', en:'Details' },
   editBtn: { ja:'編集', en:'Edit' },
+  importToLocalBtn: { ja:'ローカルに取り込む', en:'Import to Local' },
+  importedBtn: { ja:'取り込みました', en:'Imported' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -2885,6 +2887,45 @@ function appendAssessmentRow(container, opts){
   return row;
 }
 
+async function importAssessmentToLocal(defaultName, a){
+  const name = (window.prompt(
+    lang === 'en' ? 'Save to local ranking/compare/titles under what name?' : 'ローカル(ランキング・比較・称号)にどの名前で取り込みますか？',
+    defaultName || ''
+  ) || '').trim();
+  if(!name) return false;
+  const levelSnapshot = levelsFromAssessment(a);
+  const key = 'leaderboard:' + encodeURIComponent(name);
+  const payload = {
+    name,
+    total: a.total || 0,
+    yen: Math.round((a.total || 0) * 10000),
+    groupTotals: a.groupTotals || GROUPS.map(() => 0),
+    date: new Date().toISOString(),
+    mode: a.mode || 'default',
+    reviewerName: reviewerName || a.reviewerDisplayName || '',
+    levelSnapshot,
+    rankingVisible: true,
+    titlesVisible: true,
+    compareVisible: true,
+  };
+  await storageRetry(() => window.storage.set(key, JSON.stringify(payload), true));
+  rankEntriesCache = [];
+  return true;
+}
+
+function appendImportButton(row, defaultName, data){
+  const btn = document.createElement('button');
+  btn.className = 'my-record-edit-btn';
+  btn.textContent = t('importToLocalBtn');
+  btn.addEventListener('click', async () => {
+    const original = btn.textContent;
+    const ok = await importAssessmentToLocal(defaultName, data);
+    btn.textContent = ok ? t('importedBtn') : original;
+    if(ok) setTimeout(() => { btn.textContent = original; }, 2000);
+  });
+  row.querySelector('.my-record-actions').appendChild(btn);
+}
+
 async function loadMyRecords(){
   const el = document.getElementById('myRecordsContent');
   if(!el) return;
@@ -2951,7 +2992,7 @@ async function loadMySelfAssessment(){
     }
     const d = snap.data();
     el.innerHTML = '';
-    appendAssessmentRow(el, {
+    const row = appendAssessmentRow(el, {
       title: `¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt`,
       meta: (d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : '',
       groupTotals: d.groupTotals,
@@ -2959,6 +3000,7 @@ async function loadMySelfAssessment(){
       editable: true,
       onEdit: () => loadFirestoreEntriesIntoEditor(undefined, d.entries),
     });
+    appendImportButton(row, reviewerName || '', d);
   }catch(err){
     console.warn('loadMySelfAssessment error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -2989,13 +3031,14 @@ async function loadFriendsSelfList(){
     selfAssessments.forEach(a => {
       const profile = friendProfiles[a.authorUid] || {};
       const name = profile.nickname || a.reviewerDisplayName || t('anon');
-      appendAssessmentRow(el, {
+      const row = appendAssessmentRow(el, {
         title: escapeHTML(name),
         meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
         groupTotals: a.groupTotals,
         levelMap: levelsFromAssessment(a),
         editable: false,
       });
+      appendImportButton(row, name, a);
     });
   }catch(err){
     console.warn('loadFriendsSelfList error:', err);
@@ -3075,13 +3118,14 @@ async function loadOthersAssessedMe(){
     peerAssessments.forEach(a => {
       const profile = friendProfiles[a.authorUid] || {};
       const name = profile.nickname || a.reviewerDisplayName || t('anon');
-      appendAssessmentRow(el, {
+      const row = appendAssessmentRow(el, {
         title: escapeHTML(name),
         meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
         groupTotals: a.groupTotals,
         levelMap: levelsFromAssessment(a),
         editable: false,
       });
+      appendImportButton(row, reviewerName || '', a);
     });
   }catch(err){
     console.warn('loadOthersAssessedMe error:', err);
@@ -3134,13 +3178,14 @@ async function loadOthersAssessedOthers(){
       const targetProfile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
       const targetName = targetProfile.nickname || a.targetNameRaw || t('anon');
       const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
-      appendAssessmentRow(el, {
+      const row = appendAssessmentRow(el, {
         title: `${escapeHTML(authorName)} → ${escapeHTML(targetName)}${linkedNote}`,
         meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
         groupTotals: a.groupTotals,
         levelMap: levelsFromAssessment(a),
         editable: false,
       });
+      appendImportButton(row, targetName, a);
     });
   }catch(err){
     console.warn('loadOthersAssessedOthers error:', err);
