@@ -750,6 +750,26 @@
   .compare-legend span{display:flex; align-items:center; gap:5px;}
   .compare-legend .dot{width:10px; height:10px; border-radius:50%; display:inline-block;}
 
+  .my-record-row{
+    display:flex; align-items:center; gap:10px; padding:10px 8px;
+    border-bottom:1px dashed var(--line-soft); flex-wrap:wrap;
+  }
+  .my-record-info{flex:1; min-width:140px;}
+  .my-record-name{font-size:13px; font-weight:700; color:var(--ink); font-family:'Zen Maru Gothic', sans-serif;}
+  .my-record-date{font-size:10px; color:var(--ink-soft); margin-top:2px;}
+  .my-record-actions{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .my-record-toggle{
+    display:flex; align-items:center; gap:4px; font-size:10px; color:var(--ink-soft);
+    cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif; white-space:nowrap;
+  }
+  .my-record-toggle input{accent-color:var(--teal-deep); cursor:pointer;}
+  .my-record-edit-btn{
+    font-size:11px; padding:5px 10px; border:1.5px solid var(--ink); border-radius:12px;
+    background:transparent; color:var(--ink); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
+    white-space:nowrap;
+  }
+  .my-record-edit-btn:hover{background:var(--ink); color:var(--paper);}
+
   .stat-section-title{
     font-size:13px; font-weight:800; color:var(--ink); margin:18px 0 8px;
     padding-bottom:4px; border-bottom:1.5px solid var(--line); letter-spacing:0.05em;

@@ -138,6 +138,7 @@ const UI_TEXT = {
   reviewerLabel: { ja:'鑑定者', en:'Appraiser' },
   reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
   reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
+  myRecordsTitle: { ja:'自分が鑑定した記録', en:'Assessments You Made' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -2628,20 +2629,7 @@ async function loadDataStats(){
   try{
     let entries = rankEntriesCache;
     if(!entries || entries.length === 0){
-      const listRes = await storageRetry(() => window.storage.list('leaderboard:', true));
-      const keys = (listRes && listRes.keys) ? listRes.keys : [];
-      const results = await Promise.allSettled(keys.map(k => storageRetry(() => window.storage.get(k, true))));
-      entries = [];
-      results.forEach((res, i) => {
-        if(res.status === 'fulfilled' && res.value && res.value.value){
-          try{
-            const parsed = JSON.parse(res.value.value);
-            parsed.key = keys[i];
-            if(!parsed.mode) parsed.mode = 'default';
-            entries.push(parsed);
-          }catch(e){ /* skip malformed entry */ }
-        }
-      });
+      entries = await fetchLeaderboardEntries();
       rankEntriesCache = entries;
     }
     if(entries.length === 0){
@@ -2738,33 +2726,119 @@ async function loadDataStats(){
   }
 }
 
+async function fetchLeaderboardEntries(){
+  const listRes = await storageRetry(() => window.storage.list('leaderboard:', true));
+  const keys = (listRes && listRes.keys) ? listRes.keys : [];
+  if(keys.length === 0) return [];
+  const results = await Promise.allSettled(
+    keys.map(k => storageRetry(() => window.storage.get(k, true)))
+  );
+  const entries = [];
+  results.forEach((res, i) => {
+    if(res.status === 'fulfilled' && res.value && res.value.value){
+      try{
+        const parsed = JSON.parse(res.value.value);
+        parsed.key = keys[i];
+        if(!parsed.mode) parsed.mode = 'default';
+        entries.push(parsed);
+      }catch(e){ /* skip malformed entry */ }
+    }
+  });
+  return entries;
+}
+
+async function setEntryRankingVisible(key, visible){
+  try{
+    const res = await storageRetry(() => window.storage.get(key, true));
+    if(!res || !res.value) return;
+    const data = JSON.parse(res.value);
+    data.rankingVisible = visible;
+    await storageRetry(() => window.storage.set(key, JSON.stringify(data), true));
+    const cached = rankEntriesCache.find(e => e.key === key);
+    if(cached) cached.rankingVisible = visible;
+  }catch(err){ console.warn('setEntryRankingVisible failed:', err); }
+}
+
+function loadEntryIntoEditor(entry){
+  state.name = entry.name || '';
+  if(entry.levelSnapshot){
+    Object.keys(entry.levelSnapshot).forEach(id => {
+      if(state.entries[id]) state.entries[id].level = entry.levelSnapshot[id];
+    });
+  }
+  if(entry.coefSnapshot){
+    Object.keys(entry.coefSnapshot).forEach(id => {
+      if(state.entries[id]) state.entries[id].coef = entry.coefSnapshot[id];
+    });
+  }
+  syncDOMFromState();
+  showPage('cert');
+}
+
+async function loadMyRecords(){
+  const el = document.getElementById('myRecordsContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see assessments you made.' : 'Googleでログインすると、自分が鑑定した記録を一覧できます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    let entries = rankEntriesCache;
+    if(!entries || entries.length === 0){
+      entries = await fetchLeaderboardEntries();
+      rankEntriesCache = entries;
+    }
+    const mine = entries.filter(e => reviewerName && (e.reviewerName || '') === reviewerName);
+    if(mine.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No assessments recorded under your current appraiser name yet.' : 'まだ現在の鑑定者名での記録がありません。'}</div>`;
+      return;
+    }
+    mine.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    el.innerHTML = '';
+    mine.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'my-record-row';
+      const visible = entry.rankingVisible !== false;
+      row.innerHTML = `
+        <div class="my-record-info">
+          <div class="my-record-name">${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}</div>
+          <div class="my-record-date">${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}</div>
+        </div>
+        <div class="my-record-actions">
+          <label class="my-record-toggle">
+            <input type="checkbox" class="my-record-rank-toggle" ${visible ? 'checked' : ''}>
+            <span>${lang === 'en' ? 'Show in ranking' : 'ランキングに表示'}</span>
+          </label>
+          <button class="my-record-edit-btn">${lang === 'en' ? 'Edit' : '編集'}</button>
+        </div>
+      `;
+      row.querySelector('.my-record-rank-toggle').addEventListener('change', (e) => {
+        setEntryRankingVisible(entry.key, e.target.checked);
+      });
+      row.querySelector('.my-record-edit-btn').addEventListener('click', () => {
+        loadEntryIntoEditor(entry);
+      });
+      el.appendChild(row);
+    });
+  }catch(err){
+    console.warn('loadMyRecords error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
 async function loadRanking(){
   const listEl = document.getElementById('rankingList');
   listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    const listRes = await storageRetry(() => window.storage.list('leaderboard:', true));
-    const keys = (listRes && listRes.keys) ? listRes.keys : [];
-    if(keys.length === 0){
+    const entries = await fetchLeaderboardEntries();
+    if(entries.length === 0){
       rankEntriesCache = [];
       renderRankModeTabs();
       renderRankTabs();
       renderRankingList(currentRankMode);
       return;
     }
-    const results = await Promise.allSettled(
-      keys.map(k => storageRetry(() => window.storage.get(k, true)))
-    );
-    const entries = [];
-    results.forEach((res, i) => {
-      if(res.status === 'fulfilled' && res.value && res.value.value){
-        try{
-          const parsed = JSON.parse(res.value.value);
-          parsed.key = keys[i];
-          if(!parsed.mode) parsed.mode = 'default';
-          entries.push(parsed);
-        }catch(e){ /* skip malformed entry */ }
-      }
-    });
     rankEntriesCache = entries;
     renderRankModeTabs();
     renderRankTabs();
@@ -3731,7 +3805,7 @@ function getRankTier(rank){
 
 function renderRankingList(mode){
   const listEl = document.getElementById('rankingList');
-  const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === currentRankMainMode);
+  const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === currentRankMainMode && e.rankingVisible !== false);
   if(filtered.length === 0){
     listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
     return;
@@ -4145,6 +4219,7 @@ function applyStaticTranslations(){
   document.getElementById('navDataLabel').textContent = t('navData');
   document.getElementById('dataTitleEl').textContent = t('dataTitle');
   document.getElementById('dataSubtitleEl').textContent = t('dataSubtitle');
+  document.getElementById('myRecordsTitleEl').textContent = t('myRecordsTitle');
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
@@ -4428,7 +4503,7 @@ function showPage(pageName){
   }
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
-  if(pageName === 'data') loadDataStats();
+  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); }
   if(pageName === 'mypage') loadMyPage();
   if(pageName === 'friends') loadFriendsPage();
 }
