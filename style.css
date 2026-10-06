@@ -576,19 +576,23 @@
   .mp-mbti-axis-btn:not(:last-child){border-right:1.5px solid var(--line);}
   .mp-mbti-axis-btn:hover{color:var(--ink);}
   .mp-mbti-axis-btn.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); color:#fff;}
-  .mp-chip-group-mbti16{gap:7px 7px;}
+  .mp-chip-group-mbti16{display:grid; grid-template-columns:repeat(4, 1fr); gap:7px;}
   .mp-chip16{
-    font-size:12px; padding:7px 11px; border-radius:16px; border:1.5px solid var(--line);
+    font-size:12px; padding:7px 4px; border-radius:16px; border:1.5px solid var(--line);
     background:var(--paper); color:var(--ink-soft); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
     font-weight:600; transition:transform .12s, box-shadow .12s, background .12s, color .12s, border-color .12s;
     display:flex; flex-direction:column; align-items:center; gap:2px; line-height:1.2;
   }
+  .mp-chip16.group-analyst{background:color-mix(in srgb, #6a4fb0 16%, var(--paper)); border-color:color-mix(in srgb, #6a4fb0 45%, var(--line)); color:#6a4fb0;}
+  .mp-chip16.group-diplomat{background:color-mix(in srgb, var(--teal) 16%, var(--paper)); border-color:color-mix(in srgb, var(--teal) 45%, var(--line)); color:var(--teal-deep);}
+  .mp-chip16.group-sentinel{background:color-mix(in srgb, #2f7dd1 16%, var(--paper)); border-color:color-mix(in srgb, #2f7dd1 45%, var(--line)); color:#1d5fa8;}
+  .mp-chip16.group-explorer{background:color-mix(in srgb, var(--gold) 16%, var(--paper)); border-color:color-mix(in srgb, var(--gold) 45%, var(--line)); color:var(--gold-deep);}
   .mp-chip16:hover{border-color:var(--red); color:var(--ink);}
   .mp-chip16.group-analyst:hover{border-color:#6a4fb0;}
   .mp-chip16.group-diplomat:hover{border-color:var(--teal);}
   .mp-chip16.group-sentinel:hover{border-color:#2f7dd1;}
   .mp-chip16.group-explorer:hover{border-color:var(--gold);}
-  .mp-chip16.active{color:#fff; border-color:transparent; font-weight:700; transform:translateY(-1px);}
+  .mp-chip16.active{color:#fff; border:2.5px solid #211c14; font-weight:700; transform:translateY(-1px);}
   .mp-chip16.group-analyst.active{background:linear-gradient(135deg, #8a6fd4, #6a4fb0); box-shadow:0 3px 8px rgba(106,79,176,0.35);}
   .mp-chip16.group-diplomat.active{background:linear-gradient(135deg, var(--teal), var(--teal-deep)); box-shadow:0 3px 8px rgba(79,125,120,0.35);}
   .mp-chip16.group-sentinel.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); box-shadow:0 3px 8px rgba(47,125,209,0.35);}
