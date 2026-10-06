@@ -139,7 +139,9 @@ const UI_TEXT = {
   reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
   reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
   myRecordsTitle: { ja:'自分が鑑定した記録', en:'Assessments You Made' },
+  mySelfTitle: { ja:'自分の自己鑑定', en:'Your Own Self-Assessment' },
   peerAssessedTitle: { ja:'自分が他人を鑑定した記録(公開設定)', en:'Assessments of Others You Made (Sharing)' },
+  friendsSelfTitle: { ja:'フレンドの自己鑑定', en:"Friends' Self-Assessments" },
   peerReviewTitle: { ja:'他人から自分が鑑定された統計', en:'Stats on How Others Assessed You' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
@@ -571,8 +573,16 @@ async function setAssessmentVisibleToTarget(assessmentId, visible){
 }
 async function fetchFriendsSelfAssessments(friendUids){
   if(!friendUids.length) return [];
-  const snap = await firebaseDb.collection('assessments').where('authorUid', 'in', friendUids.slice(0, 30)).where('kind', '==', 'self').get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // A list query here (where authorUid in [...]) hits a Firestore rules limitation:
+  // the per-document isAcceptedFriend() check in firestore.rules isn't honored for
+  // list/query requests, only for direct doc reads, so it always comes back
+  // permission-denied. Fetching each friend's doc individually by id sidesteps that.
+  const results = await Promise.allSettled(
+    friendUids.map(uid => firebaseDb.collection('assessments').doc(selfAssessmentDocId(uid)).get())
+  );
+  return results
+    .filter(r => r.status === 'fulfilled' && r.value.exists)
+    .map(r => ({ id: r.value.id, ...r.value.data() }));
 }
 async function listUnlinkedPeerAssessments(myUid){
   const snap = await firebaseDb.collection('assessments').where('authorUid', '==', myUid).where('kind', '==', 'peer').where('targetUid', '==', null).get();
@@ -2837,6 +2847,74 @@ async function loadMyRecords(){
   }
 }
 
+async function loadMySelfAssessment(){
+  const el = document.getElementById('mySelfContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see your own self-assessment.' : 'Googleでログインすると、自分の自己鑑定を見られます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    const snap = await firebaseDb.collection('assessments').doc(selfAssessmentDocId(firebaseUser.uid)).get();
+    if(!snap.exists){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No self-assessment saved yet.' : 'まだ自己鑑定が保存されていません。'}</div>`;
+      return;
+    }
+    const d = snap.data();
+    const totals = d.groupTotals || GROUPS.map(() => 0);
+    let html = `<div class="my-record-row"><div class="my-record-info">
+      <div class="my-record-name">¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt</div>
+      <div class="my-record-date">${(d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : ''}</div>
+    </div></div>`;
+    html += '<ul style="padding-left:18px; margin:4px 0;">' + GROUPS.map((g, gi) => `<li>${escapeHTML(tName(g.name))}: ${(totals[gi] || 0).toFixed(1)}pt</li>`).join('') + '</ul>';
+    el.innerHTML = html;
+  }catch(err){
+    console.warn('loadMySelfAssessment error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+async function loadFriendsSelfList(){
+  const el = document.getElementById('friendsSelfContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "Sign in with Google to see friends' self-assessments." : 'Googleでログインすると、フレンドの自己鑑定を見られます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    await ensureFriendsPageCache(false);
+    const { friendUids, friendProfiles } = friendsPageCache;
+    if(friendUids.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No friends yet.' : 'まだフレンドがいません。'}</div>`;
+      return;
+    }
+    const selfAssessments = await fetchFriendsSelfAssessments(friendUids);
+    if(selfAssessments.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "No friends have saved a self-assessment yet." : 'まだ自己鑑定を保存しているフレンドがいません。'}</div>`;
+      return;
+    }
+    el.innerHTML = '';
+    selfAssessments.forEach(a => {
+      const profile = friendProfiles[a.authorUid] || {};
+      const name = profile.nickname || a.reviewerDisplayName || t('anon');
+      const row = document.createElement('div');
+      row.className = 'my-record-row';
+      row.innerHTML = `
+        <div class="my-record-info">
+          <div class="my-record-name">${escapeHTML(name)}</div>
+          <div class="my-record-date">¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt</div>
+        </div>
+      `;
+      el.appendChild(row);
+    });
+  }catch(err){
+    console.warn('loadFriendsSelfList error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
 async function loadPeerAssessedByMe(){
   const el = document.getElementById('peerAssessedContent');
   if(!el) return;
@@ -4289,7 +4367,9 @@ function applyStaticTranslations(){
   document.getElementById('dataTitleEl').textContent = t('dataTitle');
   document.getElementById('dataSubtitleEl').textContent = t('dataSubtitle');
   document.getElementById('myRecordsTitleEl').textContent = t('myRecordsTitle');
+  document.getElementById('mySelfTitleEl').textContent = t('mySelfTitle');
   document.getElementById('peerAssessedTitleEl').textContent = t('peerAssessedTitle');
+  document.getElementById('friendsSelfTitleEl').textContent = t('friendsSelfTitle');
   document.getElementById('peerReviewTitleEl').textContent = t('peerReviewTitle');
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
@@ -4574,7 +4654,7 @@ function showPage(pageName){
   }
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
-  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); loadPeerAssessedByMe(); loadDataPeerReviewStats(); }
+  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); loadMySelfAssessment(); loadPeerAssessedByMe(); loadFriendsSelfList(); loadDataPeerReviewStats(); }
   if(pageName === 'mypage') loadMyPage();
   if(pageName === 'friends') loadFriendsPage();
 }
