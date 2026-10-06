@@ -519,6 +519,66 @@
   }
   .lang-btn.active{background:var(--ink); color:var(--paper); font-weight:700;}
 
+  .mp-hero{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    padding:26px 16px 22px; margin-bottom:18px; text-align:center;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(165,58,53,0.10), transparent 60%),
+      radial-gradient(ellipse at 85% 100%, rgba(182,146,60,0.10), transparent 60%),
+      #fff;
+    border:1px solid var(--line); border-radius:18px;
+  }
+  .mp-avatar{
+    width:76px; height:76px; border-radius:50%;
+    background:linear-gradient(135deg, var(--red), var(--gold-deep));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Kaisei Decol', serif; font-size:32px; font-weight:700; color:#fff;
+    box-shadow:0 6px 16px rgba(165,58,53,0.3);
+  }
+  .mp-name-input{
+    font-family:'Kaisei Decol', serif; font-size:21px; font-weight:700; color:var(--ink);
+    text-align:center; border:none; border-bottom:2px solid var(--line); background:transparent;
+    padding:4px 8px; max-width:240px; width:100%;
+  }
+  .mp-name-input:focus{outline:none; border-color:var(--red);}
+  .mp-name-input::placeholder{color:var(--ink-soft); font-weight:500;}
+  .mp-hero-note{font-size:10.5px; color:var(--ink-soft);}
+
+  .mp-card{
+    background:#fff; border:1px solid var(--line); border-radius:14px;
+    padding:14px 14px 6px; margin-bottom:12px; box-shadow:0 1px 4px rgba(36,32,24,0.05);
+  }
+  .mp-card-title{
+    display:flex; align-items:center; gap:7px;
+    font-family:'Zen Maru Gothic', sans-serif; font-weight:800; font-size:12.5px; color:var(--ink);
+    letter-spacing:0.03em; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--line-soft);
+  }
+  .mp-card-icon{font-size:15px;}
+  .mp-card-hint{font-size:10px; font-weight:600; color:var(--ink-soft); margin-left:auto;}
+  .mp-field{margin-bottom:12px;}
+  .mp-field-label{display:block; font-size:11px; font-weight:700; color:var(--ink-soft); margin-bottom:6px;}
+  .mp-chip-group{display:flex; flex-wrap:wrap; gap:6px;}
+  .mp-chip{
+    font-size:12px; padding:7px 13px; border-radius:16px; border:1.5px solid var(--line);
+    background:var(--paper); color:var(--ink-soft); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
+    font-weight:600; transition:transform .12s, box-shadow .12s, background .12s, color .12s, border-color .12s;
+  }
+  .mp-chip:hover{border-color:var(--red); color:var(--ink);}
+  .mp-chip.active{
+    background:linear-gradient(135deg, var(--red), var(--red-deep)); border-color:transparent; color:#fff;
+    font-weight:700; box-shadow:0 3px 8px rgba(165,58,53,0.35); transform:translateY(-1px);
+  }
+  .mp-chip.mp-chip-mbti.active{background:linear-gradient(135deg, #2f7dd1, #1d5fa8); box-shadow:0 3px 8px rgba(47,125,209,0.35);}
+  .mp-chip.mp-chip-tag.active{background:linear-gradient(135deg, var(--teal), var(--teal-deep)); box-shadow:0 3px 8px rgba(79,125,120,0.35);}
+  .mp-save-bar{display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 0 4px;}
+  .mp-save-btn{
+    font-family:'Zen Maru Gothic', sans-serif; font-weight:800; font-size:14px; padding:11px 32px;
+    border-radius:24px; border:none; cursor:pointer; color:#fff;
+    background:linear-gradient(135deg, var(--red), var(--red-deep));
+    box-shadow:0 5px 14px rgba(165,58,53,0.35);
+  }
+  .mp-save-status{font-size:11px; color:var(--ink-soft); min-height:14px;}
+
   .rank-note{
     text-align:center; font-size:11px; color:var(--ink-soft); margin-bottom:18px;
   }
@@ -912,6 +972,19 @@
   </div>
 </div>
 
+<div class="doc" id="pageMyPage" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">My Page</div>
+    <h1 id="mypageTitleEl">マイページ</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle" id="mypageSubtitleEl">自分のプロフィールを記録します</div>
+
+    <div id="mypageRoot"></div>
+  </div>
+</div>
+
 <div class="doc" id="pageFriends" style="display:none;">
   <div class="frame">
     <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
@@ -919,7 +992,7 @@
     <div class="eyebrow-doc">Friends</div>
     <h1 id="friendsTitleEl">フレンド</h1>
     <div class="title-divider"></div>
-    <div class="subtitle" id="friendsSubtitleEl">フレンドの自己評価・他己評価を管理します</div>
+    <div class="subtitle" id="friendsSubtitleEl">フレンドの申請・承認・管理を行います</div>
 
     <div id="friendsPageRoot"></div>
   </div>
@@ -943,6 +1016,9 @@
   </button>
   <button class="bottom-nav-btn" data-page="data" id="navDataBtn">
     <span class="bn-icon">📊</span><span class="bn-label" id="navDataLabel">データ</span>
+  </button>
+  <button class="bottom-nav-btn" data-page="mypage" id="navMypageBtn">
+    <span class="bn-icon">🪪</span><span class="bn-label" id="navMypageLabel">マイページ</span>
   </button>
   <button class="bottom-nav-btn" data-page="friends" id="navFriendsBtn">
     <span class="bn-icon">👥</span><span class="bn-label" id="navFriendsLabel">フレンド</span>
@@ -1195,9 +1271,6 @@ const PROFILE_FIELDS = {
   gender: { label:'性別', options:[
     {v:'male', l:'男性'}, {v:'female', l:'女性'}, {v:'other', l:'その他'}, {v:'undisclosed', l:'回答しない'},
   ]},
-  loveType: { label:'恋愛タイプ', options:[
-    {v:'passionate', l:'熱愛型'}, {v:'stable', l:'安定型'}, {v:'shy', l:'奥手型'}, {v:'free', l:'自由型'}, {v:'devoted', l:'一途型'},
-  ]},
   birthOrder: { label:'生まれ順', options:[
     {v:'first', l:'長子'}, {v:'middle', l:'中間子'}, {v:'last', l:'末っ子'}, {v:'only', l:'一人っ子'},
   ]},
@@ -1252,7 +1325,7 @@ async function loadMyProfileAttributes(){
   const data = snap.exists ? snap.data() : {};
   myProfileAttrs = Object.assign({
     nickname: '', ageGroup: null, gender: null, mbti: { EI:null, SN:null, TF:null, JP:null },
-    loveType: null, birthOrder: null, educationCategory: null, careerField: null, activityCategories: [],
+    birthOrder: null, educationCategory: null, careerField: null, activityCategories: [],
   }, data);
   if(!myProfileAttrs.mbti) myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
   if(!myProfileAttrs.activityCategories) myProfileAttrs.activityCategories = [];
@@ -1267,32 +1340,85 @@ async function saveMyProfileAttributes(){
   );
 }
 
-function chipButtonsHTML(options, selectedValue){
-  return options.map(o => `<button type="button" class="lang-btn profile-chip${selectedValue === o.v ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('');
+function chipButtonsHTML(options, selectedValue, extraClass){
+  return options.map(o => `<button type="button" class="mp-chip${extraClass ? ' ' + extraClass : ''}${selectedValue === o.v ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('');
 }
 
-function renderProfileAttributesUI(){
-  const root = document.getElementById('profileAttrsContent');
+function mpFieldHTML(fieldKey){
+  const field = PROFILE_FIELDS[fieldKey];
+  return `<div class="mp-field">
+    <span class="mp-field-label">${field.label}</span>
+    <div class="mp-chip-group" data-field="${fieldKey}">${chipButtonsHTML(field.options, myProfileAttrs[fieldKey])}</div>
+  </div>`;
+}
+
+async function loadMyPage(){
+  const root = document.getElementById('mypageRoot');
+  if(!root) return;
+  if(!firebaseDb || !firebaseUser){
+    root.innerHTML = '<div class="rank-empty">マイページを使うにはホーム画面下部の設定からGoogleでログインしてください。</div>';
+    return;
+  }
+  root.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    if(!myProfileAttrs) await loadMyProfileAttributes();
+    renderMyPageUI();
+  }catch(err){
+    console.warn('loadMyPage failed:', err);
+    root.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+function renderMyPageUI(){
+  const root = document.getElementById('mypageRoot');
   if(!root || !myProfileAttrs) return;
-  let html = `<div class="settings-row"><span class="settings-label">ニックネーム</span>
-    <input type="text" id="nicknameInput" maxlength="20" value="${escapeHTML(myProfileAttrs.nickname || '')}" placeholder="表示名" style="flex:1; min-width:140px; padding:8px; border:1px solid var(--line); border-radius:8px;"></div>`;
-  Object.keys(PROFILE_FIELDS).forEach(fieldKey => {
-    const field = PROFILE_FIELDS[fieldKey];
-    html += `<div class="settings-row profile-field-row"><span class="settings-label">${field.label}</span>
-      <div class="profile-chip-group" data-field="${fieldKey}" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${chipButtonsHTML(field.options, myProfileAttrs[fieldKey])}</div></div>`;
-  });
-  html += `<div class="settings-row profile-field-row"><span class="settings-label">活動タグ(複数選択可)</span>
-    <div class="profile-chip-group" data-field="activityCategories" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${ACTIVITY_CATEGORY_OPTIONS.map(o => `<button type="button" class="lang-btn profile-chip${myProfileAttrs.activityCategories.includes(o.v) ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('')}</div></div>`;
-  MBTI_AXES.forEach(axis => {
-    html += `<div class="settings-row profile-field-row"><span class="settings-label">${axis.label}</span>
-      <div class="profile-chip-group" data-mbti-axis="${axis.key}" style="display:flex; flex-wrap:wrap; gap:4px; flex:1;">${chipButtonsHTML(axis.options, myProfileAttrs.mbti[axis.key])}</div></div>`;
-  });
-  html += `<button class="lang-btn" id="saveProfileAttrsBtn" style="margin-top:8px;">プロフィールを保存</button><span id="profileAttrsSaveStatus" style="margin-left:8px; font-size:11px;"></span>`;
+  const initial = (myProfileAttrs.nickname || '').trim().slice(0, 1) || '鑑';
+
+  let html = `
+    <div class="mp-hero">
+      <div class="mp-avatar">${escapeHTML(initial)}</div>
+      <input type="text" id="nicknameInput" class="mp-name-input" maxlength="20" value="${escapeHTML(myProfileAttrs.nickname || '')}" placeholder="ニックネームを入力">
+      <div class="mp-hero-note">フレンドにはこの名前で表示されます</div>
+    </div>
+
+    <div class="mp-card">
+      <div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
+      ${mpFieldHTML('ageGroup')}
+      ${mpFieldHTML('gender')}
+      ${mpFieldHTML('birthOrder')}
+    </div>
+
+    <div class="mp-card">
+      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
+      ${mpFieldHTML('educationCategory')}
+      ${mpFieldHTML('careerField')}
+    </div>
+
+    <div class="mp-card">
+      <div class="mp-card-title"><span class="mp-card-icon">🧭</span>性格タイプ（MBTI）</div>
+      ${MBTI_AXES.map(axis => `<div class="mp-field">
+        <span class="mp-field-label">${axis.label}</span>
+        <div class="mp-chip-group mp-chip-group-mbti" data-mbti-axis="${axis.key}">${chipButtonsHTML(axis.options, myProfileAttrs.mbti[axis.key], 'mp-chip-mbti')}</div>
+      </div>`).join('')}
+    </div>
+
+    <div class="mp-card">
+      <div class="mp-card-title"><span class="mp-card-icon">🏷️</span>活動タグ<span class="mp-card-hint">複数選択可</span></div>
+      <div class="mp-field">
+        <div class="mp-chip-group mp-chip-group-tag" data-field="activityCategories">${ACTIVITY_CATEGORY_OPTIONS.map(o => `<button type="button" class="mp-chip mp-chip-tag${myProfileAttrs.activityCategories.includes(o.v) ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('')}</div>
+      </div>
+    </div>
+
+    <div class="mp-save-bar">
+      <button class="mp-save-btn" id="saveProfileAttrsBtn">プロフィールを保存</button>
+      <span id="profileAttrsSaveStatus" class="mp-save-status"></span>
+    </div>
+  `;
   root.innerHTML = html;
 
-  root.querySelectorAll('.profile-chip-group[data-field]').forEach(group => {
+  root.querySelectorAll('.mp-chip-group[data-field]').forEach(group => {
     const fieldKey = group.dataset.field;
-    group.querySelectorAll('.profile-chip').forEach(btn => {
+    group.querySelectorAll('.mp-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const v = btn.dataset.value;
         if(fieldKey === 'activityCategories'){
@@ -1302,22 +1428,26 @@ function renderProfileAttributesUI(){
         } else {
           myProfileAttrs[fieldKey] = (myProfileAttrs[fieldKey] === v) ? null : v;
         }
-        renderProfileAttributesUI();
+        renderMyPageUI();
       });
     });
   });
-  root.querySelectorAll('.profile-chip-group[data-mbti-axis]').forEach(group => {
+  root.querySelectorAll('.mp-chip-group[data-mbti-axis]').forEach(group => {
     const axisKey = group.dataset.mbtiAxis;
-    group.querySelectorAll('.profile-chip').forEach(btn => {
+    group.querySelectorAll('.mp-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const v = btn.dataset.value;
         myProfileAttrs.mbti[axisKey] = (myProfileAttrs.mbti[axisKey] === v) ? null : v;
-        renderProfileAttributesUI();
+        renderMyPageUI();
       });
     });
   });
   const nicknameInput = document.getElementById('nicknameInput');
-  if(nicknameInput) nicknameInput.addEventListener('input', () => { myProfileAttrs.nickname = nicknameInput.value; });
+  if(nicknameInput) nicknameInput.addEventListener('input', () => {
+    myProfileAttrs.nickname = nicknameInput.value;
+    const avatar = root.querySelector('.mp-avatar');
+    if(avatar) avatar.textContent = nicknameInput.value.trim().slice(0, 1) || '鑑';
+  });
   const saveBtn = document.getElementById('saveProfileAttrsBtn');
   if(saveBtn) saveBtn.addEventListener('click', async () => {
     const statusEl = document.getElementById('profileAttrsSaveStatus');
@@ -1509,11 +1639,6 @@ function renderFriendsPage(){
   const { incoming } = friendsPageCache;
   root.innerHTML = `
     <div class="settings-block" style="margin-bottom:16px;">
-      <div class="settings-label" style="display:block; margin-bottom:8px;">プロフィール属性（タップで選択）</div>
-      <div id="profileAttrsContent"></div>
-    </div>
-
-    <div class="settings-block" style="margin-bottom:16px;">
       <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド申請</div>
       <div class="account-row">
         <input type="email" id="friendEmailInput" placeholder="フレンドのメールアドレス" style="flex:1; min-width:180px; padding:8px; border:1px solid var(--line); border-radius:8px;">
@@ -1544,7 +1669,6 @@ function renderFriendsPage(){
     </div>
   `;
 
-  renderProfileAttributesUI();
   renderIncomingRequests();
   renderFriendList();
   renderFriendRanking();
@@ -5240,7 +5364,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', friends:'pageFriends' };
+  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -5258,6 +5382,7 @@ function showPage(pageName){
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
   if(pageName === 'data') loadDataStats();
+  if(pageName === 'mypage') loadMyPage();
   if(pageName === 'friends') loadFriendsPage();
 }
 
@@ -5271,6 +5396,7 @@ document.getElementById('navCompareBtn').addEventListener('click', () => showPag
 document.getElementById('navTitlesBtn').addEventListener('click', () => showPage('titles'));
 document.getElementById('navShareBtn').addEventListener('click', () => showPage('share'));
 document.getElementById('navDataBtn').addEventListener('click', () => showPage('data'));
+document.getElementById('navMypageBtn').addEventListener('click', () => showPage('mypage'));
 document.getElementById('navFriendsBtn').addEventListener('click', () => showPage('friends'));
 document.getElementById('shareImageBtn').addEventListener('click', async () => {
   const canvas = document.getElementById('shareCanvas');
