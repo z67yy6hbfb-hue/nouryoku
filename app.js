@@ -139,6 +139,8 @@ const UI_TEXT = {
   reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
   reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
   myRecordsTitle: { ja:'自分が鑑定した記録', en:'Assessments You Made' },
+  peerAssessedTitle: { ja:'自分が他人を鑑定した記録(公開設定)', en:'Assessments of Others You Made (Sharing)' },
+  peerReviewTitle: { ja:'他人から自分が鑑定された統計', en:'Stats on How Others Assessed You' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -560,7 +562,14 @@ async function syncAssessmentsToFirestore(){
 
 async function fetchPeerAssessmentsAboutMe(myUid){
   const snap = await firebaseDb.collection('assessments').where('targetUid', '==', myUid).where('kind', '==', 'peer').get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.visibleToTarget !== false);
+}
+async function fetchMyPeerAssessments(myUid){
+  const snap = await firebaseDb.collection('assessments').where('authorUid', '==', myUid).where('kind', '==', 'peer').get();
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+async function setAssessmentVisibleToTarget(assessmentId, visible){
+  await firebaseDb.collection('assessments').doc(assessmentId).update({ visibleToTarget: visible });
 }
 async function fetchFriendsSelfAssessments(friendUids){
   if(!friendUids.length) return [];
@@ -613,7 +622,30 @@ function buildHistogram(totals, binSize){
 }
 
 /* --- フレンドページ UI --- */
-let friendsPageCache = { friendships: [], accepted: [], incoming: [], outgoing: [], friendUids: [], outgoingUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {} };
+let friendsPageCache = { friendships: [], accepted: [], incoming: [], outgoing: [], friendUids: [], outgoingUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {}, loaded: false };
+
+async function ensureFriendsPageCache(force){
+  if(!firebaseDb || !firebaseUser) return false;
+  if(!force && friendsPageCache.loaded) return true;
+  const myUid = firebaseUser.uid;
+  if(!myProfileAttrs) await loadMyProfileAttributes();
+  const [friendships, peerAssessments] = await Promise.all([
+    listMyFriendships(myUid),
+    fetchPeerAssessmentsAboutMe(myUid),
+  ]);
+  const accepted = friendships.filter(f => f.status === 'accepted');
+  const incoming = friendships.filter(f => f.status === 'pending' && f.requestedBy !== myUid);
+  const outgoing = friendships.filter(f => f.status === 'pending' && f.requestedBy === myUid);
+  const friendUids = accepted.map(f => f.uids.find(u => u !== myUid));
+  const outgoingUids = outgoing.map(f => f.uids.find(u => u !== myUid));
+  const settingsEntries = await Promise.all(friendUids.map(uid => getFriendSetting(myUid, uid).then(s => [uid, s])));
+  const friendSettings = Object.fromEntries(settingsEntries);
+  const profileUids = Array.from(new Set([...friendUids, ...outgoingUids]));
+  const friendProfileEntries = await Promise.all(profileUids.map(uid => profilePublicRef(uid).get().then(s => [uid, s.exists ? s.data() : {}])));
+  const friendProfiles = Object.fromEntries(friendProfileEntries);
+  friendsPageCache = { friendships, accepted, incoming, outgoing, friendUids, outgoingUids, peerAssessments, friendSettings, friendProfiles, loaded: true };
+  return true;
+}
 
 async function loadFriendsPage(){
   const root = document.getElementById('friendsPageRoot');
@@ -623,24 +655,8 @@ async function loadFriendsPage(){
     return;
   }
   root.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
-  const myUid = firebaseUser.uid;
   try{
-    if(!myProfileAttrs) await loadMyProfileAttributes();
-    const [friendships, peerAssessments] = await Promise.all([
-      listMyFriendships(myUid),
-      fetchPeerAssessmentsAboutMe(myUid),
-    ]);
-    const accepted = friendships.filter(f => f.status === 'accepted');
-    const incoming = friendships.filter(f => f.status === 'pending' && f.requestedBy !== myUid);
-    const outgoing = friendships.filter(f => f.status === 'pending' && f.requestedBy === myUid);
-    const friendUids = accepted.map(f => f.uids.find(u => u !== myUid));
-    const outgoingUids = outgoing.map(f => f.uids.find(u => u !== myUid));
-    const settingsEntries = await Promise.all(friendUids.map(uid => getFriendSetting(myUid, uid).then(s => [uid, s])));
-    const friendSettings = Object.fromEntries(settingsEntries);
-    const profileUids = Array.from(new Set([...friendUids, ...outgoingUids]));
-    const friendProfileEntries = await Promise.all(profileUids.map(uid => profilePublicRef(uid).get().then(s => [uid, s.exists ? s.data() : {}])));
-    const friendProfiles = Object.fromEntries(friendProfileEntries);
-    friendsPageCache = { friendships, accepted, incoming, outgoing, friendUids, outgoingUids, peerAssessments, friendSettings, friendProfiles };
+    await ensureFriendsPageCache(true);
     renderFriendsPage();
   }catch(err){
     console.warn('loadFriendsPage failed:', err);
@@ -825,30 +841,35 @@ function renderFriendRanking(){
   }).catch(() => { el.innerHTML = '<div class="rank-empty">読み込みに失敗しました</div>'; });
 }
 
-function renderPeerReviewSection(){
-  const el = document.getElementById('peerReviewSection');
+function renderPeerReviewSection(containerId){
+  containerId = containerId || 'peerReviewSection';
+  const el = document.getElementById(containerId);
   if(!el) return;
   const { peerAssessments, friendSettings, friendProfiles } = friendsPageCache;
   if(peerAssessments.length === 0){
     el.innerHTML = '<div class="rank-empty">まだ誰からも他己評価されていません</div>';
     return;
   }
+  const checklistId = containerId + '-peerReviewerChecklist';
+  const segmentId = containerId + '-segmentFilterSelect';
+  const anonBtnId = containerId + '-anonymousToggleBtn';
+  const resultId = containerId + '-peerAverageResult';
   el.innerHTML = `
-    <div id="peerReviewerChecklist"></div>
+    <div id="${checklistId}"></div>
     <div class="settings-row">
       <span class="settings-label">属性で絞り込み</span>
-      <select id="segmentFilterSelect" multiple style="flex:1; min-width:160px;">
+      <select id="${segmentId}" multiple style="flex:1; min-width:160px;">
         ${SEGMENT_OPTIONS.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}
       </select>
     </div>
     <div class="settings-row">
       <span class="settings-label">匿名表示</span>
-      <button class="lang-btn" id="anonymousToggleBtn">OFF</button>
+      <button class="lang-btn" id="${anonBtnId}">OFF</button>
     </div>
-    <div id="peerAverageResult" style="margin-top:8px;"></div>
+    <div id="${resultId}" style="margin-top:8px;"></div>
   `;
 
-  const checklistEl = document.getElementById('peerReviewerChecklist');
+  const checklistEl = document.getElementById(checklistId);
   checklistEl.innerHTML = peerAssessments.map(a => {
     const uid = a.authorUid;
     const profile = friendProfiles[uid] || {};
@@ -869,32 +890,32 @@ function renderPeerReviewSection(){
   });
 
   let anonymousOn = false;
-  const anonBtn = document.getElementById('anonymousToggleBtn');
+  const anonBtn = document.getElementById(anonBtnId);
   anonBtn.addEventListener('click', () => {
     anonymousOn = !anonymousOn;
     anonBtn.textContent = anonymousOn ? 'ON' : 'OFF';
     anonBtn.classList.toggle('active', anonymousOn);
     recomputePeerAverage();
   });
-  document.getElementById('segmentFilterSelect').addEventListener('change', recomputePeerAverage);
+  document.getElementById(segmentId).addEventListener('change', recomputePeerAverage);
 
   function recomputePeerAverage(){
     const includedUids = new Set(
       Object.keys(friendsPageCache.friendSettings).filter(uid => friendsPageCache.friendSettings[uid].includeTheirReviewOfMe)
     );
-    const segmentKeys = Array.from(document.getElementById('segmentFilterSelect').selectedOptions).map(o => o.value);
+    const segmentKeys = Array.from(document.getElementById(segmentId).selectedOptions).map(o => o.value);
     const result = aggregatePeerAssessments(peerAssessments, {
       includedReviewerUids: includedUids.size ? includedUids : null,
       segmentKeys,
       anonymous: anonymousOn,
     });
-    renderPeerResult(result);
+    renderPeerResult(resultId, result);
   }
   recomputePeerAverage();
 }
 
-function renderPeerResult(result){
-  const el = document.getElementById('peerAverageResult');
+function renderPeerResult(resultId, result){
+  const el = document.getElementById(resultId);
   if(!el) return;
   if(result.count === 0){ el.innerHTML = '該当する評価がありません（算入にチェックを入れてください）'; return; }
   let html = `<p>対象人数: ${result.count}人 / 平均: ${result.average.toFixed(1)}pt</p>`;
@@ -2418,23 +2439,10 @@ async function loadCompare(){
   try{
     let entries = rankEntriesCache;
     if(!entries || entries.length === 0){
-      const listRes = await storageRetry(() => window.storage.list('leaderboard:', true));
-      const keys = (listRes && listRes.keys) ? listRes.keys : [];
-      const results = await Promise.allSettled(keys.map(k => storageRetry(() => window.storage.get(k, true))));
-      entries = [];
-      results.forEach((res, i) => {
-        if(res.status === 'fulfilled' && res.value && res.value.value){
-          try{
-            const parsed = JSON.parse(res.value.value);
-            parsed.key = keys[i];
-            if(!parsed.mode) parsed.mode = 'default';
-            entries.push(parsed);
-          }catch(e){ /* skip malformed entry */ }
-        }
-      });
+      entries = await fetchLeaderboardEntries();
       rankEntriesCache = entries;
     }
-    compareEntries = entries.filter(e => (e.mode || 'default') !== 'variable');
+    compareEntries = entries.filter(e => (e.mode || 'default') !== 'variable' && e.compareVisible !== false);
     const liveLabel = (lang === 'en' ? '★ Current (unsaved)' : '★ 現在の入力') + (state.name ? ` - ${state.name}` : '');
     compareOptions = [{ id: '__live__', label: liveLabel }]
       .concat(compareEntries.map((e, i) => ({ id: String(i), label: e.name || t('anon') })));
@@ -2747,17 +2755,22 @@ async function fetchLeaderboardEntries(){
   return entries;
 }
 
-async function setEntryRankingVisible(key, visible){
+async function setEntryVisibility(key, field, visible){
   try{
     const res = await storageRetry(() => window.storage.get(key, true));
     if(!res || !res.value) return;
     const data = JSON.parse(res.value);
-    data.rankingVisible = visible;
+    data[field] = visible;
     await storageRetry(() => window.storage.set(key, JSON.stringify(data), true));
     const cached = rankEntriesCache.find(e => e.key === key);
-    if(cached) cached.rankingVisible = visible;
-  }catch(err){ console.warn('setEntryRankingVisible failed:', err); }
+    if(cached) cached[field] = visible;
+  }catch(err){ console.warn('setEntryVisibility failed:', err); }
 }
+const MY_RECORD_VISIBILITY_FIELDS = [
+  { field: 'rankingVisible', label: { ja:'ランキングに表示', en:'Show in ranking' } },
+  { field: 'titlesVisible', label: { ja:'称号に表示', en:'Show in titles' } },
+  { field: 'compareVisible', label: { ja:'比較に表示', en:'Show in compare' } },
+];
 
 function loadEntryIntoEditor(entry){
   state.name = entry.name || '';
@@ -2799,22 +2812,25 @@ async function loadMyRecords(){
     mine.forEach(entry => {
       const row = document.createElement('div');
       row.className = 'my-record-row';
-      const visible = entry.rankingVisible !== false;
+      const toggles = MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
+          <label class="my-record-toggle">
+            <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
+            <span>${label[lang]}</span>
+          </label>`).join('');
       row.innerHTML = `
         <div class="my-record-info">
           <div class="my-record-name">${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}</div>
           <div class="my-record-date">${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}</div>
         </div>
         <div class="my-record-actions">
-          <label class="my-record-toggle">
-            <input type="checkbox" class="my-record-rank-toggle" ${visible ? 'checked' : ''}>
-            <span>${lang === 'en' ? 'Show in ranking' : 'ランキングに表示'}</span>
-          </label>
+          ${toggles}
           <button class="my-record-edit-btn">${lang === 'en' ? 'Edit' : '編集'}</button>
         </div>
       `;
-      row.querySelector('.my-record-rank-toggle').addEventListener('change', (e) => {
-        setEntryRankingVisible(entry.key, e.target.checked);
+      row.querySelectorAll('.my-record-vis-toggle').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          setEntryVisibility(entry.key, e.target.dataset.field, e.target.checked);
+        });
       });
       row.querySelector('.my-record-edit-btn').addEventListener('click', () => {
         loadEntryIntoEditor(entry);
@@ -2823,6 +2839,76 @@ async function loadMyRecords(){
     });
   }catch(err){
     console.warn('loadMyRecords error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+async function loadPeerAssessedByMe(){
+  const el = document.getElementById('peerAssessedContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to manage sharing of assessments you made of others.' : 'Googleでログインすると、他人を鑑定した記録の公開設定を一覧できます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    await ensureFriendsPageCache(false);
+    const mine = await fetchMyPeerAssessments(firebaseUser.uid);
+    if(mine.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'You haven\'t assessed anyone else yet.' : 'まだ他人を鑑定した記録がありません。'}</div>`;
+      return;
+    }
+    mine.sort((a, b) => {
+      const at = a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0;
+      const bt = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
+      return bt - at;
+    });
+    const { friendProfiles } = friendsPageCache;
+    el.innerHTML = '';
+    mine.forEach(a => {
+      const profile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
+      const targetName = profile.nickname || a.targetNameRaw || t('anon');
+      const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
+      const visible = a.visibleToTarget !== false;
+      const row = document.createElement('div');
+      row.className = 'my-record-row';
+      row.innerHTML = `
+        <div class="my-record-info">
+          <div class="my-record-name">${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(targetName)}${linkedNote}</div>
+          <div class="my-record-date">${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')}円</div>
+        </div>
+        <div class="my-record-actions">
+          <label class="my-record-toggle">
+            <input type="checkbox" class="my-record-vis-toggle" ${visible ? 'checked' : ''}>
+            <span>${lang === 'en' ? 'Show to this person' : '相手に見せる'}</span>
+          </label>
+        </div>
+      `;
+      row.querySelector('.my-record-vis-toggle').addEventListener('change', async (e) => {
+        try{ await setAssessmentVisibleToTarget(a.id, e.target.checked); }
+        catch(err){ console.warn('setAssessmentVisibleToTarget failed:', err); e.target.checked = !e.target.checked; }
+      });
+      el.appendChild(row);
+    });
+  }catch(err){
+    console.warn('loadPeerAssessedByMe error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+async function loadDataPeerReviewStats(){
+  const el = document.getElementById('dataPeerReview');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see stats on how others assessed you.' : 'Googleでログインすると、他人から鑑定された統計を見られます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    await ensureFriendsPageCache(false);
+    renderPeerReviewSection('dataPeerReview');
+  }catch(err){
+    console.warn('loadDataPeerReviewStats error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
   }
 }
@@ -3734,23 +3820,12 @@ async function loadTitles(){
   const listEl = document.getElementById('titlesList');
   listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    let entries = rankEntriesCache;
-    if(!entries || entries.length === 0){
-      const listRes = await storageRetry(() => window.storage.list('leaderboard:', true));
-      const keys = (listRes && listRes.keys) ? listRes.keys : [];
-      const results = await Promise.allSettled(keys.map(k => storageRetry(() => window.storage.get(k, true))));
-      entries = [];
-      results.forEach((res, i) => {
-        if(res.status === 'fulfilled' && res.value && res.value.value){
-          try{
-            const parsed = JSON.parse(res.value.value);
-            parsed.key = keys[i];
-            entries.push(parsed);
-          }catch(e){ /* skip malformed entry */ }
-        }
-      });
-      rankEntriesCache = entries;
+    let allEntries = rankEntriesCache;
+    if(!allEntries || allEntries.length === 0){
+      allEntries = await fetchLeaderboardEntries();
+      rankEntriesCache = allEntries;
     }
+    const entries = allEntries.filter(e => e.titlesVisible !== false);
     if(entries.length === 0){
       listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
       return;
@@ -4220,6 +4295,8 @@ function applyStaticTranslations(){
   document.getElementById('dataTitleEl').textContent = t('dataTitle');
   document.getElementById('dataSubtitleEl').textContent = t('dataSubtitle');
   document.getElementById('myRecordsTitleEl').textContent = t('myRecordsTitle');
+  document.getElementById('peerAssessedTitleEl').textContent = t('peerAssessedTitle');
+  document.getElementById('peerReviewTitleEl').textContent = t('peerReviewTitle');
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
@@ -4503,7 +4580,7 @@ function showPage(pageName){
   }
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
-  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); }
+  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); loadPeerAssessedByMe(); loadDataPeerReviewStats(); }
   if(pageName === 'mypage') loadMyPage();
   if(pageName === 'friends') loadFriendsPage();
 }

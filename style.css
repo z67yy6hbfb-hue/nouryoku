@@ -757,7 +757,7 @@
   .my-record-info{flex:1; min-width:140px;}
   .my-record-name{font-size:13px; font-weight:700; color:var(--ink); font-family:'Zen Maru Gothic', sans-serif;}
   .my-record-date{font-size:10px; color:var(--ink-soft); margin-top:2px;}
-  .my-record-actions{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .my-record-actions{display:flex; align-items:center; gap:6px 10px; flex-wrap:wrap; width:100%;}
   .my-record-toggle{
     display:flex; align-items:center; gap:4px; font-size:10px; color:var(--ink-soft);
     cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif; white-space:nowrap;
