@@ -1469,7 +1469,14 @@ async function sendFriendRequestByEmail(email){
   const pairId = friendPairId(firebaseUser.uid, targetUid);
   const ref = firebaseDb.collection('friendships').doc(pairId);
   const snap = await ref.get();
-  if(snap.exists) throw new Error('既に申請済み、またはフレンドです');
+  if(snap.exists){
+    const data = snap.data();
+    if(data.status === 'accepted') throw new Error('すでにフレンドです');
+    if(data.requestedBy === firebaseUser.uid) throw new Error('既に申請済みです。相手の承認をお待ちください');
+    const pendingErr = new Error('相手から申請が届いています。「受信した申請」から承認してください');
+    pendingErr.incomingPending = true;
+    throw pendingErr;
+  }
   await ref.set({
     uids: [firebaseUser.uid, targetUid],
     requestedBy: firebaseUser.uid,
@@ -1602,7 +1609,7 @@ function buildHistogram(totals, binSize){
 }
 
 /* --- フレンドページ UI --- */
-let friendsPageCache = { friendships: [], accepted: [], incoming: [], friendUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {} };
+let friendsPageCache = { friendships: [], accepted: [], incoming: [], outgoing: [], friendUids: [], outgoingUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {} };
 
 async function loadFriendsPage(){
   const root = document.getElementById('friendsPageRoot');
@@ -1621,12 +1628,15 @@ async function loadFriendsPage(){
     ]);
     const accepted = friendships.filter(f => f.status === 'accepted');
     const incoming = friendships.filter(f => f.status === 'pending' && f.requestedBy !== myUid);
+    const outgoing = friendships.filter(f => f.status === 'pending' && f.requestedBy === myUid);
     const friendUids = accepted.map(f => f.uids.find(u => u !== myUid));
+    const outgoingUids = outgoing.map(f => f.uids.find(u => u !== myUid));
     const settingsEntries = await Promise.all(friendUids.map(uid => getFriendSetting(myUid, uid).then(s => [uid, s])));
     const friendSettings = Object.fromEntries(settingsEntries);
-    const friendProfileEntries = await Promise.all(friendUids.map(uid => profilePublicRef(uid).get().then(s => [uid, s.exists ? s.data() : {}])));
+    const profileUids = Array.from(new Set([...friendUids, ...outgoingUids]));
+    const friendProfileEntries = await Promise.all(profileUids.map(uid => profilePublicRef(uid).get().then(s => [uid, s.exists ? s.data() : {}])));
     const friendProfiles = Object.fromEntries(friendProfileEntries);
-    friendsPageCache = { friendships, accepted, incoming, friendUids, peerAssessments, friendSettings, friendProfiles };
+    friendsPageCache = { friendships, accepted, incoming, outgoing, friendUids, outgoingUids, peerAssessments, friendSettings, friendProfiles };
     renderFriendsPage();
   }catch(err){
     console.warn('loadFriendsPage failed:', err);
@@ -1636,7 +1646,7 @@ async function loadFriendsPage(){
 
 function renderFriendsPage(){
   const root = document.getElementById('friendsPageRoot');
-  const { incoming } = friendsPageCache;
+  const { incoming, outgoing } = friendsPageCache;
   root.innerHTML = `
     <div class="settings-block" style="margin-bottom:16px;">
       <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド申請</div>
@@ -1651,6 +1661,12 @@ function renderFriendsPage(){
     <div class="settings-block" style="margin-bottom:16px;">
       <div class="settings-label" style="display:block; margin-bottom:8px;">受信した申請</div>
       <div id="incomingRequestsList"></div>
+    </div>` : ''}
+
+    ${outgoing.length ? `
+    <div class="settings-block" style="margin-bottom:16px;">
+      <div class="settings-label" style="display:block; margin-bottom:8px;">送信した申請（承認待ち）</div>
+      <div id="outgoingRequestsList"></div>
     </div>` : ''}
 
     <div class="settings-block" style="margin-bottom:16px;">
@@ -1670,6 +1686,7 @@ function renderFriendsPage(){
   `;
 
   renderIncomingRequests();
+  renderOutgoingRequests();
   renderFriendList();
   renderFriendRanking();
   renderPeerReviewSection();
@@ -1682,8 +1699,24 @@ function renderFriendsPage(){
       await sendFriendRequestByEmail(input.value);
       statusEl.textContent = '申請を送信しました';
       input.value = '';
-    }catch(err){ statusEl.textContent = err.message || '送信に失敗しました'; }
+      await loadFriendsPage();
+    }catch(err){
+      statusEl.textContent = err.message || '送信に失敗しました';
+      if(err.incomingPending) await loadFriendsPage();
+    }
   });
+}
+
+function renderOutgoingRequests(){
+  const el = document.getElementById('outgoingRequestsList');
+  if(!el) return;
+  const { outgoing, friendProfiles } = friendsPageCache;
+  el.innerHTML = outgoing.map(f => {
+    const uid = f.uids.find(u => u !== firebaseUser.uid);
+    const profile = friendProfiles[uid] || {};
+    const name = profile.nickname || uid;
+    return `<div class="account-row"><span>${escapeHTML(name)}</span><span style="font-size:11px; color:var(--ink-soft);">相手の承認待ちです</span></div>`;
+  }).join('');
 }
 
 function renderIncomingRequests(){
