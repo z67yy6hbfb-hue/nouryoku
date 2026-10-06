@@ -140,9 +140,12 @@ const UI_TEXT = {
   reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
   myRecordsTitle: { ja:'自分が鑑定した記録', en:'Assessments You Made' },
   mySelfTitle: { ja:'自分の自己鑑定', en:'Your Own Self-Assessment' },
-  peerAssessedTitle: { ja:'自分が他人を鑑定した記録(公開設定)', en:'Assessments of Others You Made (Sharing)' },
   friendsSelfTitle: { ja:'フレンドの自己鑑定', en:"Friends' Self-Assessments" },
-  peerReviewTitle: { ja:'他人から自分が鑑定された統計', en:'Stats on How Others Assessed You' },
+  peerAssessedTitle: { ja:'自分が他人を鑑定', en:'You Assessed Someone Else' },
+  othersAssessedMeTitle: { ja:'他人が自分を鑑定', en:'Others Assessed You' },
+  othersAssessedOthersTitle: { ja:'他人が他人を鑑定', en:'Others Assessed Others' },
+  detailBtn: { ja:'詳細', en:'Details' },
+  editBtn: { ja:'編集', en:'Edit' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
   valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
@@ -570,6 +573,18 @@ async function fetchMyPeerAssessments(myUid){
 }
 async function setAssessmentVisibleToTarget(assessmentId, visible){
   await firebaseDb.collection('assessments').doc(assessmentId).update({ visibleToTarget: visible });
+}
+async function fetchFriendsPeerAssessments(friendUids){
+  // Same list-query rules limitation as fetchFriendsSelfAssessments: peer docs are
+  // keyed by slot index (uid_peer_0..5), so fetch each possible slot directly instead
+  // of a where(authorUid==...) query.
+  const perFriend = await Promise.all(friendUids.map(async uid => {
+    const slots = await Promise.allSettled(
+      [0, 1, 2, 3, 4, 5].map(i => firebaseDb.collection('assessments').doc(peerAssessmentDocId(uid, i)).get())
+    );
+    return slots.filter(r => r.status === 'fulfilled' && r.value.exists).map(r => ({ id: r.value.id, ...r.value.data() }));
+  }));
+  return perFriend.flat();
 }
 async function fetchFriendsSelfAssessments(friendUids){
   if(!friendUids.length) return [];
@@ -2792,6 +2807,84 @@ function loadEntryIntoEditor(entry){
   showPage('cert');
 }
 
+function loadFirestoreEntriesIntoEditor(name, entriesObj){
+  if(name !== undefined) state.name = name || '';
+  if(entriesObj){
+    Object.keys(entriesObj).forEach(id => {
+      if(!state.entries[id]) return;
+      const e = entriesObj[id];
+      if(e && e.level !== undefined) state.entries[id].level = e.level;
+      if(e && e.coef !== undefined) state.entries[id].coef = e.coef;
+    });
+  }
+  syncDOMFromState();
+  showPage('cert');
+}
+
+function levelsFromAssessment(a){
+  if(a.levelSnapshot) return a.levelSnapshot;
+  if(a.entries){
+    const out = {};
+    Object.keys(a.entries).forEach(id => { out[id] = a.entries[id] && a.entries[id].level; });
+    return out;
+  }
+  return {};
+}
+
+function buildLevelDetailHTML(levelMap){
+  const byGroup = GROUPS.map(() => []);
+  ALL_LEAVES.forEach(leaf => {
+    const key = levelMap[leaf.id];
+    if(!key || key === 'none') return;
+    byGroup[leaf.gi].push({ name: leaf.name, label: LEVEL_FULL[lang][key] || key });
+  });
+  let html = '';
+  GROUPS.forEach((g, gi) => {
+    if(byGroup[gi].length === 0) return;
+    html += `<div class="detail-group-name">${escapeHTML(tName(g.name))}</div>`;
+    html += byGroup[gi].map(it => `<div class="detail-item"><span>${escapeHTML(tName(it.name))}</span><span>${escapeHTML(it.label)}</span></div>`).join('');
+  });
+  return html || `<div>${lang === 'en' ? 'No item-level data recorded.' : '項目レベルの記録がありません。'}</div>`;
+}
+
+function appendAssessmentRow(container, opts){
+  const row = document.createElement('div');
+  row.className = 'my-record-row';
+  row.innerHTML = `
+    <div class="my-record-info">
+      <div class="my-record-name">${opts.title}</div>
+      <div class="my-record-date">${opts.meta || ''}</div>
+    </div>
+    <div class="my-record-actions">
+      <button class="my-record-edit-btn detail-toggle-btn">${t('detailBtn')}</button>
+      ${opts.extraControlsHTML || ''}
+      ${opts.editable ? `<button class="my-record-edit-btn edit-btn">${t('editBtn')}</button>` : ''}
+    </div>
+    <div class="assessment-detail" style="display:none;"></div>
+  `;
+  const detailPanel = row.querySelector('.assessment-detail');
+  row.querySelector('.detail-toggle-btn').addEventListener('click', () => {
+    const isOpen = detailPanel.style.display !== 'none';
+    if(isOpen){ detailPanel.style.display = 'none'; return; }
+    if(!detailPanel.dataset.rendered){
+      let html = '';
+      if(opts.groupTotals){
+        html += '<ul style="padding-left:18px; margin:0 0 6px;">' + GROUPS.map((g, gi) => `<li>${escapeHTML(tName(g.name))}: ${(opts.groupTotals[gi] || 0).toFixed(1)}pt</li>`).join('') + '</ul>';
+      }
+      html += buildLevelDetailHTML(opts.levelMap || {});
+      detailPanel.innerHTML = html;
+      detailPanel.dataset.rendered = '1';
+    }
+    detailPanel.style.display = 'block';
+  });
+  if(opts.editable && opts.onEdit){
+    row.querySelector('.edit-btn').addEventListener('click', opts.onEdit);
+  }
+  if(opts.wireExtra) opts.wireExtra(row);
+  container.appendChild(row);
+  return row;
+}
+
 async function loadMyRecords(){
   const el = document.getElementById('myRecordsContent');
   if(!el) return;
@@ -2814,32 +2907,27 @@ async function loadMyRecords(){
     mine.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     el.innerHTML = '';
     mine.forEach(entry => {
-      const row = document.createElement('div');
-      row.className = 'my-record-row';
       const toggles = MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
           <label class="my-record-toggle">
             <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
             <span>${label[lang]}</span>
           </label>`).join('');
-      row.innerHTML = `
-        <div class="my-record-info">
-          <div class="my-record-name">${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}</div>
-          <div class="my-record-date">${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}</div>
-        </div>
-        <div class="my-record-actions">
-          ${toggles}
-          <button class="my-record-edit-btn">${lang === 'en' ? 'Edit' : '編集'}</button>
-        </div>
-      `;
-      row.querySelectorAll('.my-record-vis-toggle').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-          setEntryVisibility(entry.key, e.target.dataset.field, e.target.checked);
-        });
+      appendAssessmentRow(el, {
+        title: `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}`,
+        meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}`,
+        groupTotals: entry.groupTotals,
+        levelMap: levelsFromAssessment(entry),
+        editable: true,
+        onEdit: () => loadEntryIntoEditor(entry),
+        extraControlsHTML: toggles,
+        wireExtra: (row) => {
+          row.querySelectorAll('.my-record-vis-toggle').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+              setEntryVisibility(entry.key, e.target.dataset.field, e.target.checked);
+            });
+          });
+        },
       });
-      row.querySelector('.my-record-edit-btn').addEventListener('click', () => {
-        loadEntryIntoEditor(entry);
-      });
-      el.appendChild(row);
     });
   }catch(err){
     console.warn('loadMyRecords error:', err);
@@ -2862,13 +2950,15 @@ async function loadMySelfAssessment(){
       return;
     }
     const d = snap.data();
-    const totals = d.groupTotals || GROUPS.map(() => 0);
-    let html = `<div class="my-record-row"><div class="my-record-info">
-      <div class="my-record-name">¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt</div>
-      <div class="my-record-date">${(d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : ''}</div>
-    </div></div>`;
-    html += '<ul style="padding-left:18px; margin:4px 0;">' + GROUPS.map((g, gi) => `<li>${escapeHTML(tName(g.name))}: ${(totals[gi] || 0).toFixed(1)}pt</li>`).join('') + '</ul>';
-    el.innerHTML = html;
+    el.innerHTML = '';
+    appendAssessmentRow(el, {
+      title: `¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt`,
+      meta: (d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : '',
+      groupTotals: d.groupTotals,
+      levelMap: levelsFromAssessment(d),
+      editable: true,
+      onEdit: () => loadFirestoreEntriesIntoEditor(undefined, d.entries),
+    });
   }catch(err){
     console.warn('loadMySelfAssessment error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -2899,15 +2989,13 @@ async function loadFriendsSelfList(){
     selfAssessments.forEach(a => {
       const profile = friendProfiles[a.authorUid] || {};
       const name = profile.nickname || a.reviewerDisplayName || t('anon');
-      const row = document.createElement('div');
-      row.className = 'my-record-row';
-      row.innerHTML = `
-        <div class="my-record-info">
-          <div class="my-record-name">${escapeHTML(name)}</div>
-          <div class="my-record-date">¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt</div>
-        </div>
-      `;
-      el.appendChild(row);
+      appendAssessmentRow(el, {
+        title: escapeHTML(name),
+        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+        groupTotals: a.groupTotals,
+        levelMap: levelsFromAssessment(a),
+        editable: false,
+      });
     });
   }catch(err){
     console.warn('loadFriendsSelfList error:', err);
@@ -2942,28 +3030,61 @@ async function loadPeerAssessedByMe(){
       const targetName = profile.nickname || a.targetNameRaw || t('anon');
       const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
       const visible = a.visibleToTarget !== false;
-      const row = document.createElement('div');
-      row.className = 'my-record-row';
-      row.innerHTML = `
-        <div class="my-record-info">
-          <div class="my-record-name">${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(targetName)}${linkedNote}</div>
-          <div class="my-record-date">${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')}円</div>
-        </div>
-        <div class="my-record-actions">
+      appendAssessmentRow(el, {
+        title: `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(targetName)}${linkedNote}`,
+        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+        groupTotals: a.groupTotals,
+        levelMap: levelsFromAssessment(a),
+        editable: true,
+        onEdit: () => loadFirestoreEntriesIntoEditor(targetName, a.entries),
+        extraControlsHTML: `
           <label class="my-record-toggle">
             <input type="checkbox" class="my-record-vis-toggle" ${visible ? 'checked' : ''}>
             <span>${lang === 'en' ? 'Show to this person' : '相手に見せる'}</span>
-          </label>
-        </div>
-      `;
-      row.querySelector('.my-record-vis-toggle').addEventListener('change', async (e) => {
-        try{ await setAssessmentVisibleToTarget(a.id, e.target.checked); }
-        catch(err){ console.warn('setAssessmentVisibleToTarget failed:', err); e.target.checked = !e.target.checked; }
+          </label>`,
+        wireExtra: (row) => {
+          row.querySelector('.my-record-vis-toggle').addEventListener('change', async (e) => {
+            try{ await setAssessmentVisibleToTarget(a.id, e.target.checked); }
+            catch(err){ console.warn('setAssessmentVisibleToTarget failed:', err); e.target.checked = !e.target.checked; }
+          });
+        },
       });
-      el.appendChild(row);
     });
   }catch(err){
     console.warn('loadPeerAssessedByMe error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+async function loadOthersAssessedMe(){
+  const el = document.getElementById('othersAssessedMeContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see assessments others made of you.' : 'Googleでログインすると、他人から鑑定された記録を見られます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    await ensureFriendsPageCache(false);
+    const { peerAssessments, friendProfiles } = friendsPageCache;
+    if(peerAssessments.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No one has assessed you yet.' : 'まだ誰からも鑑定されていません。'}</div>`;
+      return;
+    }
+    el.innerHTML = '';
+    peerAssessments.forEach(a => {
+      const profile = friendProfiles[a.authorUid] || {};
+      const name = profile.nickname || a.reviewerDisplayName || t('anon');
+      appendAssessmentRow(el, {
+        title: escapeHTML(name),
+        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+        groupTotals: a.groupTotals,
+        levelMap: levelsFromAssessment(a),
+        editable: false,
+      });
+    });
+  }catch(err){
+    console.warn('loadOthersAssessedMe error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
   }
 }
@@ -2981,6 +3102,48 @@ async function loadDataPeerReviewStats(){
     renderPeerReviewSection('dataPeerReview');
   }catch(err){
     console.warn('loadDataPeerReviewStats error:', err);
+    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
+async function loadOthersAssessedOthers(){
+  const el = document.getElementById('othersAssessedOthersContent');
+  if(!el) return;
+  if(!firebaseUser){
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see what friends assessed about other people.' : 'Googleでログインすると、フレンドが他人を鑑定した記録を見られます。'}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    await ensureFriendsPageCache(false);
+    const { friendUids, friendProfiles } = friendsPageCache;
+    if(friendUids.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No friends yet.' : 'まだフレンドがいません。'}</div>`;
+      return;
+    }
+    const all = await fetchFriendsPeerAssessments(friendUids);
+    const others = all.filter(a => a.visibleToTarget !== false && a.targetUid !== firebaseUser.uid);
+    if(others.length === 0){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Nothing to show yet.' : '該当する記録がありません。'}</div>`;
+      return;
+    }
+    el.innerHTML = '';
+    others.forEach(a => {
+      const authorProfile = friendProfiles[a.authorUid] || {};
+      const authorName = authorProfile.nickname || a.reviewerDisplayName || t('anon');
+      const targetProfile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
+      const targetName = targetProfile.nickname || a.targetNameRaw || t('anon');
+      const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
+      appendAssessmentRow(el, {
+        title: `${escapeHTML(authorName)} → ${escapeHTML(targetName)}${linkedNote}`,
+        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+        groupTotals: a.groupTotals,
+        levelMap: levelsFromAssessment(a),
+        editable: false,
+      });
+    });
+  }catch(err){
+    console.warn('loadOthersAssessedOthers error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
   }
 }
@@ -4368,9 +4531,10 @@ function applyStaticTranslations(){
   document.getElementById('dataSubtitleEl').textContent = t('dataSubtitle');
   document.getElementById('myRecordsTitleEl').textContent = t('myRecordsTitle');
   document.getElementById('mySelfTitleEl').textContent = t('mySelfTitle');
-  document.getElementById('peerAssessedTitleEl').textContent = t('peerAssessedTitle');
   document.getElementById('friendsSelfTitleEl').textContent = t('friendsSelfTitle');
-  document.getElementById('peerReviewTitleEl').textContent = t('peerReviewTitle');
+  document.getElementById('peerAssessedTitleEl').textContent = t('peerAssessedTitle');
+  document.getElementById('othersAssessedMeTitleEl').textContent = t('othersAssessedMeTitle');
+  document.getElementById('othersAssessedOthersTitleEl').textContent = t('othersAssessedOthersTitle');
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
@@ -4654,7 +4818,16 @@ function showPage(pageName){
   }
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
-  if(pageName === 'data'){ loadDataStats(); loadMyRecords(); loadMySelfAssessment(); loadPeerAssessedByMe(); loadFriendsSelfList(); loadDataPeerReviewStats(); }
+  if(pageName === 'data'){
+    loadDataStats();
+    loadMyRecords();
+    loadMySelfAssessment();
+    loadFriendsSelfList();
+    loadPeerAssessedByMe();
+    loadOthersAssessedMe();
+    loadDataPeerReviewStats();
+    loadOthersAssessedOthers();
+  }
   if(pageName === 'mypage') loadMyPage();
   if(pageName === 'friends') loadFriendsPage();
 }
