@@ -666,9 +666,22 @@
   .stat-card .stat-label{font-size:10.5px; color:var(--ink-soft); font-weight:700; margin-bottom:4px;}
   .stat-card .stat-value{font-size:18px; font-weight:800; color:var(--sc, var(--ink)); font-variant-numeric:tabular-nums;}
   .stat-bar-row{margin-bottom:10px;}
-  .stat-bar-label{display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:3px;}
+  .stat-bar-label{display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:3px; gap:8px;}
+  .stat-bar-label span:first-child{white-space:nowrap;}
+  .stat-bar-label span:last-child{text-align:right; color:var(--ink-soft);}
   .stat-bar-track{height:8px; border-radius:4px; background:var(--line-soft); overflow:hidden;}
   .stat-bar-fill{height:100%; border-radius:4px;}
+
+  .item-stats-group{border:1px solid var(--line); border-radius:10px; margin-bottom:8px; overflow:hidden;}
+  .item-stats-group summary{
+    cursor:pointer; list-style:none; padding:10px 12px; font-weight:800; font-size:12.5px;
+    display:flex; justify-content:space-between; align-items:center; background:var(--line-soft);
+  }
+  .item-stats-group summary::-webkit-details-marker{display:none;}
+  .item-stats-group summary::before{content:'▸'; margin-right:6px; display:inline-block; transition:transform .15s;}
+  .item-stats-group[open] summary::before{transform:rotate(90deg);}
+  .item-stats-group summary .ig-count{font-weight:600; font-size:10.5px; color:var(--ink-soft);}
+  .item-stats-group .item-stats-body{padding:12px;}
 
   @media (max-width:480px){
     h1{font-size:26px;}
@@ -2051,6 +2064,34 @@ const GROUPS = [
     {name:'リーダーシップ', c:5.0, d:{r:"集団の中でリーダー役を担った経験はあるが、\n方針決定・役割分担・メンバーへの指示などが不安定。\n集団を導くことに大きな不慣れがある。",b:"決められた範囲で集団をまとめ、簡単な役割分担や指示ができる。",bi:"小規模な集団で方針を示し、役割分担・情報共有を行いながら目標に向けて集団を導ける。\n問題が起きた場合にもメンバーと話し合って解決できる。",i:"複数人の集団で目標を設定し、役割分担・意思決定・進捗管理を行いながら集団を導ける。\nメンバーの意見を聞き、必要な判断を下せる。",ia:"複数の能力・性格を持つメンバーからなる集団を率い、メンバーの能力に応じて役割や方針を決定できる。\n意見の対立が発生した場合にも調整し、集団全体の成果を高められる。",a:"複数の能力・性格を持つメンバーからなる集団を継続的に率い、成果を高い水準まで引き上げられる。\n人材配置・意思決定・対立解決・動機づけなどを適切に行い、実際の組織・チームで高い成果を継続的に出せる。",s:"大規模・複雑な組織を長期間にわたって率いるトップ層。\n異なる能力・価値観・利害を持つ多数の人間を統合し、組織の目的・文化・意思決定構造まで設計できる。\n危機・対立・環境変化が起きても組織を維持・変革し、同規模の組織を率いるトップリーダーと比較しても卓越した成果を継続的に出せる。",m:"大規模・複雑な組織を長期間にわたって率いる世界トップクラス。\n異なる能力・価値観・利害を持つ多数の人間を統合し、\n組織の目的・文化・人材配置・意思決定構造まで高度に設計できる。\n危機・対立・環境変化が起きても組織を維持・変革し、\n非常に大規模な組織・プロジェクトにおいても卓越した成果を継続的に出せる。\n同規模の組織を率いる世界トップクラスのリーダーと比較しても、\n明確に突出した能力を持つ。"}},
   ]},
 ];
+
+function flattenLeaves(){
+  const leaves = [];
+  GROUPS.forEach((g, gi) => {
+    g.items.forEach((item, ii) => {
+      const subs = item.subs ? item.subs : [{n: item.name}];
+      subs.forEach((s, si) => {
+        const id = item.subs ? `g${gi}i${ii}s${si}` : `g${gi}i${ii}`;
+        leaves.push({ id, gi, name: item.subs ? s.n : item.name });
+      });
+    });
+  });
+  return leaves;
+}
+const ALL_LEAVES = flattenLeaves();
+function levelValueByKey(key){
+  const lv = LEVELS.find(l => l.key === key);
+  return lv ? lv.value : null;
+}
+function nearestLevelKey(val){
+  let best = LEVELS[0], bestDiff = Infinity;
+  LEVELS.forEach(l => {
+    if(l.key === 'none') return;
+    const diff = Math.abs(l.value - val);
+    if(diff < bestDiff){ bestDiff = diff; best = l; }
+  });
+  return best.key;
+}
 
 // state: { name, entries: { id: {level, coef} }, groupMult: { gi: number } }
 let baseEntries = {};
@@ -3474,6 +3515,43 @@ async function loadDataStats(){
           <div class="stat-bar-label"><span>${escapeHTML(tName(g.name))}</span><span>${val.toFixed(1)} ${t('pt')}</span></div>
           <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${pct}%; background:${GROUP_COLORS[gi]};"></div></div>
         </div>`;
+      });
+    }
+
+    if(entries.length > 0){
+      html += `<div class="stat-section-title">${lang === 'en' ? 'Average Level by Item' : '項目別の平均レベル'}</div>`;
+      html += `<div class="rank-note" style="text-align:left;">${lang === 'en'
+        ? 'Each average only counts people who actually recorded a level for that item — unrecorded items are excluded, like a batting average.'
+        : '各項目は、実際にその項目を評価した人だけで平均を出しています(野球の打率のように、未評価の人は含みません)。'}</div>`;
+      GROUPS.forEach((g, gi) => {
+        const rows = ALL_LEAVES.filter(leaf => leaf.gi === gi).map(leaf => {
+          const vals = [];
+          entries.forEach(e => {
+            const key = e.levelSnapshot && e.levelSnapshot[leaf.id];
+            if(!key || key === 'none') return;
+            const v = levelValueByKey(key);
+            if(v !== null) vals.push(v);
+          });
+          if(vals.length === 0) return null;
+          const avgVal = vals.reduce((a, b) => a + b, 0) / vals.length;
+          return { name: leaf.name, avgVal, count: vals.length };
+        }).filter(Boolean);
+        if(rows.length === 0) return;
+        rows.sort((a, b) => b.avgVal - a.avgVal);
+        const maxRow = Math.max(...rows.map(r => r.avgVal), 0.25);
+        html += `<details class="item-stats-group">
+          <summary><span>${escapeHTML(tName(g.name))}</span><span class="ig-count">${lang === 'en' ? `${rows.length} items` : `${rows.length}項目`}</span></summary>
+          <div class="item-stats-body">`;
+        rows.forEach(r => {
+          const pct = Math.min(100, (r.avgVal / maxRow) * 100);
+          const levelLabel = LEVEL_FULL[lang][nearestLevelKey(r.avgVal)];
+          const countLabel = lang === 'en' ? `n=${r.count}` : `${r.count}人`;
+          html += `<div class="stat-bar-row">
+            <div class="stat-bar-label"><span>${escapeHTML(tName(r.name))}</span><span>${lang === 'en' ? `avg ${levelLabel} (${r.avgVal.toFixed(2)}) ・ ${countLabel}` : `平均 ${levelLabel}(${r.avgVal.toFixed(2)})・${countLabel}`}</span></div>
+            <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${pct}%; background:${GROUP_COLORS[gi]};"></div></div>
+          </div>`;
+        });
+        html += `</div></details>`;
       });
     }
 
