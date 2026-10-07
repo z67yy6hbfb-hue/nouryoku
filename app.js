@@ -3255,11 +3255,11 @@ const CATEGORY_INFO = {
   score: { ja:'スコア', en:'Score' },
 };
 const RARITY_INFO = {
-  1: { label:'白', gradient:'linear-gradient(135deg,#ffffff,#e4e7eb,#c9ccd1)', glow:'0 0 4px rgba(180,185,190,0.5)', textColor:'#3a3f45' },
-  2: { label:'銅', gradient:'linear-gradient(135deg,#ecc492,#cd7f32,#7c4414)', glow:'0 0 8px rgba(205,127,50,0.65)', textColor:'#fff' },
-  3: { label:'銀', gradient:'linear-gradient(135deg,#f6f7f9,#c3c7cc,#868b90)', glow:'0 0 10px rgba(195,199,204,0.7)', textColor:'#3a3f45' },
-  4: { label:'金', gradient:'linear-gradient(135deg,#fff6d2,#f4c542,#b9800a)', glow:'0 0 16px rgba(244,197,66,0.85)', textColor:'#3a2f12' },
-  5: { label:'虹', gradient:'linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcf7f,#4d96ff,#9b5de5,#ff6b6b)', glow:'0 0 22px rgba(255,255,255,0.9), 0 0 14px rgba(155,93,229,0.8)', textColor:'#fff' },
+  1: { label:'★', gradient:'linear-gradient(135deg,#ffffff,#e4e7eb,#c9ccd1)', glow:'0 0 4px rgba(180,185,190,0.5)', textColor:'#3a3f45' },
+  2: { label:'★★', gradient:'linear-gradient(135deg,#ecc492,#cd7f32,#7c4414)', glow:'0 0 8px rgba(205,127,50,0.65)', textColor:'#fff' },
+  3: { label:'★★★', gradient:'linear-gradient(135deg,#f6f7f9,#c3c7cc,#868b90)', glow:'0 0 10px rgba(195,199,204,0.7)', textColor:'#3a3f45' },
+  4: { label:'★★★★', gradient:'linear-gradient(135deg,#fff6d2,#f4c542,#b9800a)', glow:'0 0 16px rgba(244,197,66,0.85)', textColor:'#3a2f12' },
+  5: { label:'★★★★★', gradient:'linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcf7f,#4d96ff,#9b5de5,#ff6b6b)', glow:'0 0 22px rgba(255,255,255,0.9), 0 0 14px rgba(155,93,229,0.8)', textColor:'#fff' },
 };
 const GROUP_IDX = { academics:0, sports:1, arts:2, craft:3, life:4, games:5, social:6 };
 function shadeColor(hex, percent){
@@ -4145,7 +4145,7 @@ function renderTitleCatalog(){
     groups[groupKey].rules.push(rule);
   });
   if(catalogSortMode === 'rarity'){
-    groupOrder.sort((a, b) => Number(b) - Number(a));
+    groupOrder.sort((a, b) => Number(a) - Number(b));
   }
 
   listEl.innerHTML = '';
