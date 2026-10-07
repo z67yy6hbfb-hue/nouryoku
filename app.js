@@ -4147,6 +4147,9 @@ function renderTitleCatalog(){
   if(catalogSortMode === 'rarity'){
     groupOrder.sort((a, b) => Number(a) - Number(b));
   }
+  groupOrder.forEach(gk => {
+    groups[gk].rules.sort((a, b) => (a.rarity || 1) - (b.rarity || 1));
+  });
 
   listEl.innerHTML = '';
   groupOrder.forEach(gk => {
