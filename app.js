@@ -3255,11 +3255,11 @@ const CATEGORY_INFO = {
   score: { ja:'スコア', en:'Score' },
 };
 const RARITY_INFO = {
-  1: { label:'★1', gradient:'linear-gradient(135deg,#b08d5a,#8a6a3f)', glow:'none' },
-  2: { label:'★2', gradient:'linear-gradient(135deg,#c9d6e8,#8fa3bf)', glow:'0 0 6px rgba(160,190,220,0.6)' },
-  3: { label:'★3', gradient:'linear-gradient(135deg,#f4c542,#a855f7,#e0447f)', glow:'0 0 12px rgba(244,197,66,0.75)' },
-  4: { label:'★4', gradient:'linear-gradient(135deg,#f4c542,#e0447f,#8b5cf6,#2f7dd1,#12977a)', glow:'0 0 18px rgba(244,197,66,0.9), 0 0 8px rgba(139,92,246,0.7)' },
-  5: { label:'★5', gradient:'linear-gradient(135deg,#ffffff,#f4c542,#e0447f,#8b5cf6,#2f7dd1,#ffffff)', glow:'0 0 24px rgba(255,255,255,0.95), 0 0 14px rgba(244,197,66,0.9)' },
+  1: { label:'白', gradient:'linear-gradient(135deg,#ffffff,#e4e7eb,#c9ccd1)', glow:'0 0 4px rgba(180,185,190,0.5)', textColor:'#3a3f45' },
+  2: { label:'銅', gradient:'linear-gradient(135deg,#ecc492,#cd7f32,#7c4414)', glow:'0 0 8px rgba(205,127,50,0.65)', textColor:'#fff' },
+  3: { label:'銀', gradient:'linear-gradient(135deg,#f6f7f9,#c3c7cc,#868b90)', glow:'0 0 10px rgba(195,199,204,0.7)', textColor:'#3a3f45' },
+  4: { label:'金', gradient:'linear-gradient(135deg,#fff6d2,#f4c542,#b9800a)', glow:'0 0 16px rgba(244,197,66,0.85)', textColor:'#3a2f12' },
+  5: { label:'虹', gradient:'linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcf7f,#4d96ff,#9b5de5,#ff6b6b)', glow:'0 0 22px rgba(255,255,255,0.9), 0 0 14px rgba(155,93,229,0.8)', textColor:'#fff' },
 };
 const GROUP_IDX = { academics:0, sports:1, arts:2, craft:3, life:4, games:5, social:6 };
 function shadeColor(hex, percent){
@@ -3279,11 +3279,9 @@ function titleTagGradient(category){
   const c = titleCategoryColor(category);
   return `linear-gradient(135deg, ${c}, ${shadeColor(c, -22)})`;
 }
-const RARITY_METAL_GRADIENTS = {
-  5: 'linear-gradient(135deg, #fff6d2 0%, #f4c542 45%, #b9800a 100%)',
-  4: 'linear-gradient(135deg, #f6f7f9 0%, #c3c7cc 45%, #868b90 100%)',
-  3: 'linear-gradient(135deg, #ecc492 0%, #cd7f32 45%, #7c4414 100%)',
-};
+const RARITY_METAL_GRADIENTS = Object.fromEntries(
+  Object.entries(RARITY_INFO).map(([k, v]) => [k, v.gradient])
+);
 function titleTagFill(rarity, category){
   return RARITY_METAL_GRADIENTS[rarity] || titleTagGradient(category);
 }
@@ -3292,7 +3290,7 @@ function titleTagBorderStyle(category){
   return `border:4px solid ${c}; box-shadow:0 0 5px ${c}99;`;
 }
 function titleTagTextColor(rarity){
-  return RARITY_METAL_GRADIENTS[rarity] ? '#3a2f12' : '#fff';
+  return (RARITY_INFO[rarity] && RARITY_INFO[rarity].textColor) || '#fff';
 }
 const LEVEL_ORDER = LEVELS.map(l => l.key);
 
@@ -4163,7 +4161,7 @@ function renderTitleCatalog(){
       const row = document.createElement('div');
       row.className = 'rank-row';
       row.innerHTML = `
-        <div class="rank-badge" style="background:${rarity.gradient}; box-shadow:${rarity.glow}; color:#fff; font-size:10px;">${rarity.label}</div>
+        <div class="rank-badge" style="background:${rarity.gradient}; box-shadow:${rarity.glow}; color:${rarity.textColor || '#fff'}; font-size:10px;">${rarity.label}</div>
         <div class="rank-info">
           <div class="rank-name">${escapeHTML(label)} <span class="title-icon" data-desc="${escapeHTML(desc).replace(/"/g,'&quot;')}">💬</span></div>
         </div>
