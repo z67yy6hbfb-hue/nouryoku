@@ -853,6 +853,9 @@
     display:flex; align-items:center; gap:10px; padding:10px 8px;
     border-bottom:1px dashed var(--line-soft); flex-wrap:wrap;
   }
+  .my-record-row.selected-row{
+    border:2px solid #1a1a1a; border-radius:10px; margin:4px 0; padding:12px 10px;
+  }
   .my-record-info{flex:1; min-width:140px;}
   .my-record-name{font-size:13px; font-weight:700; color:var(--ink); font-family:'Zen Maru Gothic', sans-serif;}
   .my-record-date{font-size:10px; color:var(--ink-soft); margin-top:2px;}
