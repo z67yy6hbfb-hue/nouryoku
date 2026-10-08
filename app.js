@@ -264,6 +264,14 @@ const PROFILE_FIELDS = {
     {v:'creative', l:'クリエイティブ'}, {v:'public_service', l:'公務員'}, {v:'management', l:'経営・管理'}, {v:'student', l:'学生'}, {v:'other_job', l:'その他'},
   ]},
 };
+// マイページの各カードをフレンドに公開するかどうかの単位(profileVisibilityのキー)
+const PROFILE_VISIBILITY_SECTIONS = [
+  { key:'basic', icon:'🪪', label:'基本情報' },
+  { key:'education', icon:'🎓', label:'学歴・職種' },
+  { key:'mbti', icon:'🧭', label:'性格タイプ（MBTI）' },
+  { key:'activity', icon:'🏷️', label:'活動タグ' },
+  { key:'certifications', icon:'🎓', label:'資格・検定' },
+];
 const MBTI_AXES = [
   { key:'EI', label:'外向(E) / 内向(I)', options:[{v:'E',l:'外向 E'},{v:'I',l:'内向 I'}] },
   { key:'SN', label:'感覚(S) / 直観(N)', options:[{v:'S',l:'感覚 S'},{v:'N',l:'直観 N'}] },
@@ -551,10 +559,12 @@ async function loadMyProfileAttributes(){
   myProfileAttrs = Object.assign({
     nickname: '', ageGroup: null, gender: null, mbti: { EI:null, SN:null, TF:null, JP:null },
     birthOrder: null, educationCategory: null, careerField: null, activityCategories: [], certifications: [],
+    profileVisibility: { basic: true, education: true, mbti: true, activity: true, certifications: true },
   }, data);
   if(!myProfileAttrs.mbti) myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
   if(!myProfileAttrs.activityCategories) myProfileAttrs.activityCategories = [];
   if(!myProfileAttrs.certifications) myProfileAttrs.certifications = [];
+  if(!myProfileAttrs.profileVisibility) myProfileAttrs.profileVisibility = { basic: true, education: true, mbti: true, activity: true, certifications: true };
 }
 
 async function saveMyProfileAttributes(){
@@ -570,6 +580,10 @@ function chipButtonsHTML(options, selectedValue, extraClass){
   return options.map(o => `<button type="button" class="mp-chip${extraClass ? ' ' + extraClass : ''}${selectedValue === o.v ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('');
 }
 
+function visToggleHTML(sectionKey){
+  const visible = (myProfileAttrs.profileVisibility || {})[sectionKey] !== false;
+  return `<button type="button" class="mp-vis-toggle${visible ? '' : ' is-private'}" data-visfield="${sectionKey}">${visible ? '🔓 公開' : '🔒 非公開'}</button>`;
+}
 function mpFieldHTML(fieldKey){
   const field = PROFILE_FIELDS[fieldKey];
   return `<div class="mp-field">
@@ -673,20 +687,20 @@ function renderMyPageUI(){
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報${visToggleHTML('basic')}</div>
       ${mpFieldHTML('ageGroup')}
       ${mpFieldHTML('gender')}
       ${mpFieldHTML('birthOrder')}
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種${visToggleHTML('education')}</div>
       ${mpFieldHTML('educationCategory')}
       ${mpFieldHTML('careerField')}
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🧭</span>性格タイプ（MBTI）</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🧭</span>性格タイプ（MBTI）${visToggleHTML('mbti')}</div>
       ${(() => {
         const code = currentMbtiCode(myProfileAttrs.mbti);
         const matched = code ? MBTI_TYPES.find(mt => mt.code === code) : null;
@@ -701,14 +715,14 @@ function renderMyPageUI(){
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🏷️</span>活動タグ<span class="mp-card-hint">複数選択可</span></div>
+      <div class="mp-card-title"><span class="mp-card-icon">🏷️</span>活動タグ<span class="mp-card-hint">複数選択可</span>${visToggleHTML('activity')}</div>
       <div class="mp-field">
         <div class="mp-chip-group mp-chip-group-tag" data-field="activityCategories">${ACTIVITY_CATEGORY_OPTIONS.map(o => `<button type="button" class="mp-chip mp-chip-tag${myProfileAttrs.activityCategories.includes(o.v) ? ' active' : ''}" data-value="${o.v}">${o.l}</button>`).join('')}</div>
       </div>
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>資格・検定</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>資格・検定${visToggleHTML('certifications')}</div>
       <div class="mp-field">
         <div class="mp-chip-group" id="certChipsContainer">${certChipsHTML()}</div>
       </div>
@@ -728,6 +742,14 @@ function renderMyPageUI(){
   `;
   root.innerHTML = html;
 
+  root.querySelectorAll('.mp-vis-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.visfield;
+      if(!myProfileAttrs.profileVisibility) myProfileAttrs.profileVisibility = {};
+      myProfileAttrs.profileVisibility[key] = !(myProfileAttrs.profileVisibility[key] !== false);
+      renderMyPageUI();
+    });
+  });
   root.querySelectorAll('.mp-chip-group[data-field]').forEach(group => {
     const fieldKey = group.dataset.field;
     group.querySelectorAll('.mp-chip').forEach(btn => {
@@ -982,6 +1004,7 @@ function buildHistogram(totals, binSize){
 
 /* --- フレンドページ UI --- */
 let friendsPageCache = { friendships: [], accepted: [], incoming: [], outgoing: [], friendUids: [], outgoingUids: [], peerAssessments: [], friendSettings: {}, friendProfiles: {}, loaded: false };
+let friendListSearchQuery = '';
 
 async function ensureFriendsPageCache(force){
   if(!firebaseDb || !firebaseUser) return false;
@@ -1050,6 +1073,7 @@ function renderFriendsPage(){
 
     <div class="settings-block" style="margin-bottom:16px;">
       <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド一覧</div>
+      <input type="text" id="friendSearchInput" class="friend-search-input" placeholder="名前で検索" autocomplete="off" value="${escapeHTML(friendListSearchQuery)}">
       <div id="friendListContent"></div>
     </div>
 
@@ -1069,6 +1093,12 @@ function renderFriendsPage(){
   renderFriendList();
   renderFriendRanking();
   renderPeerReviewSection();
+
+  const friendSearchInput = document.getElementById('friendSearchInput');
+  if(friendSearchInput) friendSearchInput.addEventListener('input', () => {
+    friendListSearchQuery = friendSearchInput.value;
+    renderFriendList();
+  });
 
   document.getElementById('sendFriendRequestBtn').addEventListener('click', async () => {
     const input = document.getElementById('friendEmailInput');
@@ -1127,13 +1157,19 @@ function renderFriendList(){
   if(!el) return;
   const { friendUids, friendSettings, friendProfiles } = friendsPageCache;
   if(friendUids.length === 0){ el.innerHTML = '<div class="rank-empty">まだフレンドがいません</div>'; return; }
-  el.innerHTML = friendUids.map(uid => {
+  const q = friendListSearchQuery.trim().toLowerCase();
+  const visibleUids = q
+    ? friendUids.filter(uid => ((friendProfiles[uid] || {}).nickname || uid).toLowerCase().includes(q))
+    : friendUids;
+  if(visibleUids.length === 0){ el.innerHTML = '<div class="rank-empty">該当するフレンドが見つかりません</div>'; return; }
+  el.innerHTML = visibleUids.map(uid => {
     const profile = friendProfiles[uid] || {};
     const setting = friendSettings[uid] || { includeInRanking: true, includeTheirReviewOfMe: false };
     const name = profile.nickname || uid;
     return `
       <div class="settings-row" data-uid="${uid}">
         <span class="settings-label">${escapeHTML(name)}</span>
+        <button class="lang-btn" data-action="profile">プロフィール</button>
         <button class="lang-btn${setting.includeInRanking ? ' active' : ''}" data-toggle="includeInRanking">ランキング反映</button>
         <button class="lang-btn${setting.includeTheirReviewOfMe ? ' active' : ''}" data-toggle="includeTheirReviewOfMe">他己評価を算入</button>
         <button class="lang-btn" data-action="link">過去データをリンク</button>
@@ -1158,6 +1194,8 @@ function renderFriendList(){
     });
     const linkBtn = row.querySelector('[data-action="link"]');
     if(linkBtn) linkBtn.addEventListener('click', () => toggleUnlinkedPicker(uid));
+    const profileBtn = row.querySelector('[data-action="profile"]');
+    if(profileBtn) profileBtn.addEventListener('click', () => showFriendProfile(uid));
   });
 }
 
@@ -3262,6 +3300,15 @@ function appendImportButton(row, defaultName, data){
   row.querySelector('.my-record-actions').appendChild(btn);
 }
 
+function appendProfileButton(row, uid){
+  if(!uid) return;
+  const btn = document.createElement('button');
+  btn.className = 'my-record-edit-btn';
+  btn.textContent = lang === 'en' ? 'Profile' : 'プロフィール';
+  btn.addEventListener('click', () => showFriendProfile(uid));
+  row.querySelector('.my-record-actions').appendChild(btn);
+}
+
 async function loadMyRecords(){
   const el = document.getElementById('myRecordsContent');
   if(!el) return;
@@ -3375,6 +3422,7 @@ async function loadFriendsSelfList(){
         editable: false,
       });
       appendImportButton(row, name, a);
+      appendProfileButton(row, a.authorUid);
     });
   }catch(err){
     console.warn('loadFriendsSelfList error:', err);
@@ -4784,6 +4832,95 @@ function customConfirm(message){
     cancelBtn.addEventListener('click', onCancel);
   });
 }
+
+/* --- フレンドのプロフィール閲覧(読み取り専用) --- */
+function profileOptionLabel(fieldKey, value){
+  const opt = PROFILE_FIELDS[fieldKey].options.find(o => o.v === value);
+  return opt ? opt.l : null;
+}
+function buildProfileViewHTML(profile){
+  profile = profile || {};
+  const vis = profile.profileVisibility || {};
+  const isVisible = key => vis[key] !== false;
+  const name = (profile.nickname || '').trim() || (lang === 'en' ? '(no name)' : '(名前未設定)');
+  let sectionsHTML = '';
+
+  if(isVisible('basic')){
+    const values = [
+      profileOptionLabel('ageGroup', profile.ageGroup),
+      profileOptionLabel('gender', profile.gender),
+      profileOptionLabel('birthOrder', profile.birthOrder),
+    ].filter(Boolean);
+    if(values.length){
+      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
+        <div class="pv-row">${values.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
+    }
+  }
+  if(isVisible('education')){
+    const values = [
+      profileOptionLabel('educationCategory', profile.educationCategory),
+      profileOptionLabel('careerField', profile.careerField),
+    ].filter(Boolean);
+    if(values.length){
+      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
+        <div class="pv-row">${values.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
+    }
+  }
+  if(isVisible('mbti')){
+    const code = currentMbtiCode(profile.mbti);
+    const matched = code ? MBTI_TYPES.find(mt => mt.code === code) : null;
+    if(matched){
+      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🧭</span>性格タイプ（MBTI）</div>
+        <div class="mp-mbti-result group-${matched.group}"><span class="mp-mbti-badge">${matched.code}</span><span class="mp-mbti-badge-name">${matched.name}</span></div></div>`;
+    }
+  }
+  if(isVisible('activity')){
+    const tags = (profile.activityCategories || [])
+      .map(v => (ACTIVITY_CATEGORY_OPTIONS.find(o => o.v === v) || {}).l)
+      .filter(Boolean);
+    if(tags.length){
+      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🏷️</span>活動タグ</div>
+        <div class="pv-row">${tags.map(v => `<span class="mp-chip mp-chip-tag active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
+    }
+  }
+  if(isVisible('certifications')){
+    const certs = profile.certifications || [];
+    if(certs.length){
+      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🎓</span>資格・検定</div>
+        <div class="pv-row">${certs.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
+    }
+  }
+
+  return `
+    <div class="pv-header">
+      <div class="mp-avatar">${escapeHTML(name.slice(0, 1) || '鑑')}</div>
+      <div class="pv-name">${escapeHTML(name)}</div>
+    </div>
+    ${sectionsHTML || `<div class="pv-empty">${lang === 'en' ? 'No public profile information yet.' : '公開しているプロフィール情報がまだありません。'}</div>`}
+  `;
+}
+function openProfileViewOverlay(profile){
+  const overlay = document.getElementById('profileViewOverlay');
+  const content = document.getElementById('profileViewContent');
+  if(!overlay || !content) return;
+  content.innerHTML = buildProfileViewHTML(profile);
+  overlay.style.display = 'flex';
+}
+function closeProfileViewOverlay(){
+  const overlay = document.getElementById('profileViewOverlay');
+  if(overlay) overlay.style.display = 'none';
+}
+async function showFriendProfile(uid){
+  if(!uid) return;
+  await ensureFriendsPageCache(false);
+  openProfileViewOverlay(friendsPageCache.friendProfiles[uid] || {});
+}
+(function initProfileViewOverlay(){
+  const overlay = document.getElementById('profileViewOverlay');
+  const closeBtn = document.getElementById('profileViewCloseBtn');
+  if(closeBtn) closeBtn.addEventListener('click', closeProfileViewOverlay);
+  if(overlay) overlay.addEventListener('click', (e) => { if(e.target === overlay) closeProfileViewOverlay(); });
+})();
 
 function initParticipantUI(){
   const btnsEl = document.getElementById('participantBtns');
