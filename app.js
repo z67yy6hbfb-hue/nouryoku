@@ -981,8 +981,20 @@ async function linkLegacyAssessmentToFriend(assessmentId, friendUid, myUid){
 }
 
 /* --- 集計・フィルター (純粋関数) --- */
+function extractPeerValue(a, fieldKey){
+  if(!fieldKey || fieldKey === 'total') return a.total || 0;
+  const gi = Number(fieldKey);
+  return (a.groupTotals && a.groupTotals[gi]) || 0;
+}
+function histogramBinSize(values){
+  if(!values.length) return 10;
+  const range = Math.max(...values) - Math.min(...values);
+  if(range <= 10) return 1;
+  if(range <= 30) return 5;
+  return 10;
+}
 function aggregatePeerAssessments(assessments, options){
-  const { includedReviewerUids = null, segmentKeys = [], anonymous = false } = options;
+  const { includedReviewerUids = null, segmentKeys = [], anonymous = false, fieldKey = 'total', friendProfiles = {} } = options;
   const filtered = assessments.filter(a => {
     if(includedReviewerUids && !includedReviewerUids.has(a.authorUid)) return false;
     const attrs = a.reviewerAttributesSnapshot || {};
@@ -990,16 +1002,25 @@ function aggregatePeerAssessments(assessments, options){
   });
   const count = filtered.length;
   if(count === 0) return { count: 0, average: null, distribution: null, breakdown: null };
-  const average = filtered.reduce((sum, a) => sum + a.total, 0) / count;
+  const values = filtered.map(a => extractPeerValue(a, fieldKey));
+  const labels = filtered.map((a, i) => anonymous
+    ? `フレンド${String.fromCharCode(65 + i)}`
+    : ((friendProfiles[a.authorUid] && friendProfiles[a.authorUid].nickname) || a.reviewerDisplayName || '不明'));
+  const average = values.reduce((sum, v) => sum + v, 0) / count;
+  let maxIdx = 0, minIdx = 0;
+  values.forEach((v, i) => { if(v > values[maxIdx]) maxIdx = i; if(v < values[minIdx]) minIdx = i; });
+  const freq = new Map();
+  values.forEach(v => { const k = v.toFixed(1); freq.set(k, (freq.get(k) || 0) + 1); });
+  let modeValue = null, modeCount = 0;
+  freq.forEach((c, k) => { if(c > modeCount){ modeCount = c; modeValue = k; } });
   return {
     count,
     average,
-    distribution: buildHistogram(filtered.map(a => a.total)),
-    breakdown: filtered.map((a, i) => ({
-      reviewerUid: a.authorUid,
-      label: anonymous ? `フレンド${String.fromCharCode(65 + i)}` : (a.reviewerDisplayName || '不明'),
-      total: a.total,
-    })),
+    max: values[maxIdx], maxLabel: labels[maxIdx],
+    min: values[minIdx], minLabel: labels[minIdx],
+    mode: modeValue, modeCount,
+    distribution: buildHistogram(values, histogramBinSize(values)),
+    breakdown: filtered.map((a, i) => ({ reviewerUid: a.authorUid, label: labels[i], total: values[i] })),
   };
 }
 function buildHistogram(totals, binSize){
@@ -1254,11 +1275,21 @@ function renderPeerReviewSection(containerId){
     el.innerHTML = '<div class="rank-empty">まだ誰からも他己評価されていません</div>';
     return;
   }
+  const fieldId = containerId + '-peerFieldSelect';
   const checklistId = containerId + '-peerReviewerChecklist';
   const segmentId = containerId + '-segmentFilterSelect';
   const anonBtnId = containerId + '-anonymousToggleBtn';
   const resultId = containerId + '-peerAverageResult';
+  const fieldOptions = [{ v:'total', l: lang === 'en' ? 'All fields' : 'すべての分野(総合)' }]
+    .concat(GROUPS.map((g, gi) => ({ v:String(gi), l: tName(g.name) })));
   el.innerHTML = `
+    <div class="stat-section-title">${lang === 'en' ? 'Statistics of Evaluations About You' : '自分に対する評価の統計'}</div>
+    <div class="settings-row">
+      <span class="settings-label">${lang === 'en' ? 'Field' : '集計する分野'}</span>
+      <select id="${fieldId}" style="flex:1; min-width:160px;">
+        ${fieldOptions.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}
+      </select>
+    </div>
     <div id="${checklistId}"></div>
     <div class="settings-row">
       <span class="settings-label">属性で絞り込み</span>
@@ -1302,16 +1333,20 @@ function renderPeerReviewSection(containerId){
     recomputePeerAverage();
   });
   document.getElementById(segmentId).addEventListener('change', recomputePeerAverage);
+  document.getElementById(fieldId).addEventListener('change', recomputePeerAverage);
 
   function recomputePeerAverage(){
     const includedUids = new Set(
       Object.keys(friendsPageCache.friendSettings).filter(uid => friendsPageCache.friendSettings[uid].includeTheirReviewOfMe)
     );
     const segmentKeys = Array.from(document.getElementById(segmentId).selectedOptions).map(o => o.value);
+    const fieldKey = document.getElementById(fieldId).value;
     const result = aggregatePeerAssessments(peerAssessments, {
       includedReviewerUids: includedUids.size ? includedUids : null,
       segmentKeys,
       anonymous: anonymousOn,
+      fieldKey,
+      friendProfiles,
     });
     renderPeerResult(resultId, result);
   }
@@ -1322,8 +1357,24 @@ function renderPeerResult(resultId, result){
   const el = document.getElementById(resultId);
   if(!el) return;
   if(result.count === 0){ el.innerHTML = '該当する評価がありません（算入にチェックを入れてください）'; return; }
-  let html = `<p>対象人数: ${result.count}人 / 平均: ${result.average.toFixed(1)}pt</p>`;
-  html += '<ul style="padding-left:18px; margin:4px 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
+  const modeDisplay = result.modeCount > 1 ? `${result.mode}pt` : (lang === 'en' ? 'None (all differ)' : 'なし(全員が異なる値)');
+  let html = `<div class="stat-cards">
+    <div class="stat-card" style="--sc:#2f7dd1;"><div class="stat-label">${lang === 'en' ? 'Count' : '対象人数'}</div><div class="stat-value">${result.count}${lang === 'en' ? '' : '人'}</div></div>
+    <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Average' : '平均値'}</div><div class="stat-value">${result.average.toFixed(1)}pt</div></div>
+    <div class="stat-card" style="--sc:#f4c542;"><div class="stat-label">${lang === 'en' ? 'Max' : '最高値'}</div><div class="stat-value">${result.max.toFixed(1)}pt</div><div class="stat-sub">${escapeHTML(result.maxLabel)}</div></div>
+    <div class="stat-card" style="--sc:#a53a35;"><div class="stat-label">${lang === 'en' ? 'Min' : '最低値'}</div><div class="stat-value">${result.min.toFixed(1)}pt</div><div class="stat-sub">${escapeHTML(result.minLabel)}</div></div>
+    <div class="stat-card" style="--sc:#8b5cf6;"><div class="stat-label">${lang === 'en' ? 'Mode' : '最頻値'}</div><div class="stat-value">${modeDisplay}</div></div>
+  </div>`;
+  if(result.distribution && result.distribution.length){
+    const maxCount = Math.max(...result.distribution.map(b => b.count), 1);
+    html += `<div class="peer-hist">` + result.distribution.map(b => `
+      <div class="peer-hist-row">
+        <span class="peer-hist-label">${b.rangeStart}〜${b.rangeEnd}pt</span>
+        <div class="peer-hist-track"><div class="peer-hist-bar" style="width:${Math.round(b.count / maxCount * 100)}%;"></div></div>
+        <span class="peer-hist-count">${b.count}</span>
+      </div>`).join('') + `</div>`;
+  }
+  html += '<ul style="padding-left:18px; margin:8px 0 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
   el.innerHTML = html;
 }
 
