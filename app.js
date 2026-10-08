@@ -138,12 +138,11 @@ const UI_TEXT = {
   reviewerLabel: { ja:'鑑定者', en:'Appraiser' },
   reviewerPlaceholder: { ja:'鑑定者名', en:'Appraiser name' },
   reviewerPrefix: { ja:'鑑定者:', en:'Appraiser:' },
-  myRecordsTitle: { ja:'自分が鑑定した記録（ローカル）', en:'Assessments You Made (Local)' },
-  mySelfTitle: { ja:'自分の自己鑑定（インターネット）', en:'Your Own Self-Assessment (Internet)' },
-  friendsSelfTitle: { ja:'フレンドの自己鑑定（インターネット）', en:"Friends' Self-Assessments (Internet)" },
-  peerAssessedTitle: { ja:'自分が他人を鑑定（インターネット）', en:'You Assessed Someone Else (Internet)' },
-  othersAssessedMeTitle: { ja:'他人が自分を鑑定（インターネット）', en:'Others Assessed You (Internet)' },
-  othersAssessedOthersTitle: { ja:'他人が他人を鑑定（インターネット）', en:'Others Assessed Others (Internet)' },
+  group1Title: { ja:'自分の鑑定結果', en:'Your Own Assessment' },
+  group2Title: { ja:'他人が自分を鑑定した結果', en:'Others Assessed You' },
+  group3Title: { ja:'自分が他人を鑑定した結果', en:'You Assessed Someone Else' },
+  group4Title: { ja:'他人が本人を鑑定した結果', en:"Other People's Own Self-Assessments" },
+  group5Title: { ja:'他人が本人以外の他人を鑑定した結果', en:'Others Assessed Other People' },
   detailBtn: { ja:'詳細', en:'Details' },
   editBtn: { ja:'編集', en:'Edit' },
   importToLocalBtn: { ja:'ローカルに取り込む', en:'Import to Local' },
@@ -3335,58 +3334,82 @@ function appendProfileButton(row, uid){
   row.querySelector('.my-record-actions').appendChild(btn);
 }
 
-async function loadMyRecords(){
-  const el = document.getElementById('myRecordsContent');
-  if(!el) return;
-  if(!firebaseUser){
-    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see assessments you made.' : 'Googleでログインすると、自分が鑑定した記録を一覧できます。'}</div>`;
-    return;
+/* --- データタブ「自分の記録」ページの5グループ -------------------------
+   主(アカウント所有者)はマイページに登録したニックネームで、鑑定対象者名/
+   鑑定者名との一致によって判定する(「主」マークと同じ考え方)。
+   ローカルの記録とインターネット(Firestore)の記録を、この名前での分類に
+   基づいて同じグループに混ぜて表示し、ローカル/インターネットの区別は
+   画面上には出さない。 */
+async function ensureDataPageLocalContext(){
+  await ensureMyProfileAttrsLoadedIfSignedIn();
+  let entries = rankEntriesCache;
+  if(!entries || entries.length === 0){
+    entries = await fetchLeaderboardEntries();
+    rankEntriesCache = entries;
   }
-  el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
-  try{
-    let entries = rankEntriesCache;
-    if(!entries || entries.length === 0){
-      entries = await fetchLeaderboardEntries();
-      rankEntriesCache = entries;
-    }
-    const mine = entries.filter(e => reviewerName && (e.reviewerName || '') === reviewerName);
-    if(mine.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No assessments recorded under your current appraiser name yet.' : 'まだ現在の鑑定者名での記録がありません。'}</div>`;
-      return;
-    }
-    mine.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    el.innerHTML = '';
-    mine.forEach(entry => {
-      const toggles = MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
-          <label class="my-record-toggle">
-            <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
-            <span>${label[lang]}</span>
-          </label>`).join('');
-      appendAssessmentRow(el, {
-        title: `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}`,
-        meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}`,
-        groupTotals: entry.groupTotals,
-        levelMap: levelsFromAssessment(entry),
-        editable: true,
-        onEdit: () => loadEntryIntoEditor(entry),
-        extraControlsHTML: toggles,
-        wireExtra: (row) => {
-          row.querySelectorAll('.my-record-vis-toggle').forEach(cb => {
-            cb.addEventListener('change', (e) => {
-              setEntryVisibility(entry.key, e.target.dataset.field, e.target.checked);
-            });
-          });
-        },
+  return { myName: ((myProfileAttrs && myProfileAttrs.nickname) || '').trim(), entries };
+}
+// kind: 'self'(自分の自己鑑定) / 'otherToMe'(他人→自分) / 'meToOther'(自分→他人) /
+//       'otherSelf'(本人以外の自己鑑定) / 'otherToOther'(本人以外→本人以外)
+function classifyLocalEntry(entry, myName){
+  const name = (entry.name || '').trim();
+  const rev = (entry.reviewerName || '').trim();
+  if(!name) return null;
+  const nameIsMe = !!myName && name === myName;
+  const revIsMe = !!myName && rev === myName;
+  if(nameIsMe && revIsMe) return 'self';
+  if(nameIsMe && !revIsMe) return 'otherToMe';
+  if(!nameIsMe && revIsMe) return 'meToOther';
+  if(rev && name === rev) return 'otherSelf';
+  return 'otherToOther';
+}
+function localEntryRowOpts(entry, myName, kind){
+  const isMine = !!myName && (entry.reviewerName || '').trim() === myName;
+  let title;
+  if(kind === 'self'){
+    title = `¥${(entry.yen || 0).toLocaleString('ja-JP')} ・ ${(entry.total || 0).toFixed(1)}pt`;
+  } else if(kind === 'otherToMe'){
+    title = escapeHTML(entry.reviewerName || t('anon'));
+  } else if(kind === 'meToOther'){
+    title = `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(entry.name || t('anon'))}`;
+  } else if(kind === 'otherSelf'){
+    title = escapeHTML(entry.name || t('anon'));
+  } else {
+    title = `${escapeHTML(entry.reviewerName || t('anon'))} → ${escapeHTML(entry.name || t('anon'))}`;
+  }
+  const meta = kind === 'self'
+    ? `${fmtDate(entry.date)} ${t('appraisedSuffix')}`
+    : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}`;
+  const toggles = isMine ? MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
+      <label class="my-record-toggle">
+        <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
+        <span>${label[lang]}</span>
+      </label>`).join('') : '';
+  return {
+    title, meta,
+    groupTotals: entry.groupTotals,
+    levelMap: levelsFromAssessment(entry),
+    editable: isMine,
+    onEdit: isMine ? (() => loadEntryIntoEditor(entry)) : undefined,
+    extraControlsHTML: toggles,
+    wireExtra: isMine ? ((row) => {
+      row.querySelectorAll('.my-record-vis-toggle').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          setEntryVisibility(entry.key, e.target.dataset.field, e.target.checked);
+        });
       });
-    });
-  }catch(err){
-    console.warn('loadMyRecords error:', err);
-    el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
-  }
+    }) : undefined,
+  };
+}
+function appendLocalGroupRows(el, entries, myName, kind){
+  entries
+    .filter(e => classifyLocalEntry(e, myName) === kind)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .forEach(entry => appendAssessmentRow(el, localEntryRowOpts(entry, myName, kind)));
 }
 
 async function loadMySelfAssessment(){
-  const el = document.getElementById('mySelfContent');
+  const el = document.getElementById('group1Content');
   if(!el) return;
   if(!firebaseUser){
     el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see your own self-assessment.' : 'Googleでログインすると、自分の自己鑑定を見られます。'}</div>`;
@@ -3394,22 +3417,27 @@ async function loadMySelfAssessment(){
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    const snap = await firebaseDb.collection('assessments').doc(selfAssessmentDocId(firebaseUser.uid)).get();
-    if(!snap.exists){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No self-assessment saved yet.' : 'まだ自己鑑定が保存されていません。'}</div>`;
-      return;
-    }
-    const d = snap.data();
+    const { myName, entries } = await ensureDataPageLocalContext();
     el.innerHTML = '';
-    const row = appendAssessmentRow(el, {
-      title: `¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt`,
-      meta: (d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : '',
-      groupTotals: d.groupTotals,
-      levelMap: levelsFromAssessment(d),
-      editable: true,
-      onEdit: () => loadFirestoreEntriesIntoEditor(undefined, d.entries),
-    });
-    appendImportButton(row, reviewerName || '', d);
+    try{
+      const snap = await firebaseDb.collection('assessments').doc(selfAssessmentDocId(firebaseUser.uid)).get();
+      if(snap.exists){
+        const d = snap.data();
+        const row = appendAssessmentRow(el, {
+          title: `¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt`,
+          meta: (d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : '',
+          groupTotals: d.groupTotals,
+          levelMap: levelsFromAssessment(d),
+          editable: true,
+          onEdit: () => loadFirestoreEntriesIntoEditor(undefined, d.entries),
+        });
+        appendImportButton(row, reviewerName || '', d);
+      }
+    }catch(err){ console.warn('loadMySelfAssessment (internet part) failed:', err); }
+    appendLocalGroupRows(el, entries, myName, 'self');
+    if(!el.children.length){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No self-assessment saved yet.' : 'まだ自己鑑定が保存されていません。'}</div>`;
+    }
   }catch(err){
     console.warn('loadMySelfAssessment error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -3417,39 +3445,38 @@ async function loadMySelfAssessment(){
 }
 
 async function loadFriendsSelfList(){
-  const el = document.getElementById('friendsSelfContent');
+  const el = document.getElementById('group4Content');
   if(!el) return;
   if(!firebaseUser){
-    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "Sign in with Google to see friends' self-assessments." : 'Googleでログインすると、フレンドの自己鑑定を見られます。'}</div>`;
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "Sign in with Google to see other people's self-assessments." : 'Googleでログインすると、他人の自己鑑定を見られます。'}</div>`;
     return;
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    await ensureFriendsPageCache(false);
-    const { friendUids, friendProfiles } = friendsPageCache;
-    if(friendUids.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No friends yet.' : 'まだフレンドがいません。'}</div>`;
-      return;
-    }
-    const selfAssessments = await fetchFriendsSelfAssessments(friendUids);
-    if(selfAssessments.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "No friends have saved a self-assessment yet." : 'まだ自己鑑定を保存しているフレンドがいません。'}</div>`;
-      return;
-    }
+    const { myName, entries } = await ensureDataPageLocalContext();
     el.innerHTML = '';
-    selfAssessments.forEach(a => {
-      const profile = friendProfiles[a.authorUid] || {};
-      const name = profile.nickname || a.reviewerDisplayName || t('anon');
-      const row = appendAssessmentRow(el, {
-        title: escapeHTML(name),
-        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
-        groupTotals: a.groupTotals,
-        levelMap: levelsFromAssessment(a),
-        editable: false,
+    try{
+      await ensureFriendsPageCache(false);
+      const { friendUids, friendProfiles } = friendsPageCache;
+      const selfAssessments = friendUids.length ? await fetchFriendsSelfAssessments(friendUids) : [];
+      selfAssessments.forEach(a => {
+        const profile = friendProfiles[a.authorUid] || {};
+        const name = profile.nickname || a.reviewerDisplayName || t('anon');
+        const row = appendAssessmentRow(el, {
+          title: escapeHTML(name),
+          meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+          groupTotals: a.groupTotals,
+          levelMap: levelsFromAssessment(a),
+          editable: false,
+        });
+        appendImportButton(row, name, a);
+        appendProfileButton(row, a.authorUid);
       });
-      appendImportButton(row, name, a);
-      appendProfileButton(row, a.authorUid);
-    });
+    }catch(err){ console.warn('loadFriendsSelfList (internet part) failed:', err); }
+    appendLocalGroupRows(el, entries, myName, 'otherSelf');
+    if(!el.children.length){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Nothing to show yet.' : '該当する記録がありません。'}</div>`;
+    }
   }catch(err){
     console.warn('loadFriendsSelfList error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -3457,7 +3484,7 @@ async function loadFriendsSelfList(){
 }
 
 async function loadPeerAssessedByMe(){
-  const el = document.getElementById('peerAssessedContent');
+  const el = document.getElementById('group3Content');
   if(!el) return;
   if(!firebaseUser){
     el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to manage sharing of assessments you made of others.' : 'Googleでログインすると、他人を鑑定した記録の公開設定を一覧できます。'}</div>`;
@@ -3465,44 +3492,47 @@ async function loadPeerAssessedByMe(){
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    await ensureFriendsPageCache(false);
-    const mine = await fetchMyPeerAssessments(firebaseUser.uid);
-    if(mine.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'You haven\'t assessed anyone else yet.' : 'まだ他人を鑑定した記録がありません。'}</div>`;
-      return;
-    }
-    mine.sort((a, b) => {
-      const at = a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0;
-      const bt = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
-      return bt - at;
-    });
-    const { friendProfiles } = friendsPageCache;
+    const { myName, entries } = await ensureDataPageLocalContext();
     el.innerHTML = '';
-    mine.forEach(a => {
-      const profile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
-      const targetName = profile.nickname || a.targetNameRaw || t('anon');
-      const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
-      const visible = a.visibleToTarget !== false;
-      appendAssessmentRow(el, {
-        title: `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(targetName)}${linkedNote}`,
-        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
-        groupTotals: a.groupTotals,
-        levelMap: levelsFromAssessment(a),
-        editable: true,
-        onEdit: () => loadFirestoreEntriesIntoEditor(targetName, a.entries),
-        extraControlsHTML: `
-          <label class="my-record-toggle">
-            <input type="checkbox" class="my-record-vis-toggle" ${visible ? 'checked' : ''}>
-            <span>${lang === 'en' ? 'Show to this person' : '相手に見せる'}</span>
-          </label>`,
-        wireExtra: (row) => {
-          row.querySelector('.my-record-vis-toggle').addEventListener('change', async (e) => {
-            try{ await setAssessmentVisibleToTarget(a.id, e.target.checked); }
-            catch(err){ console.warn('setAssessmentVisibleToTarget failed:', err); e.target.checked = !e.target.checked; }
-          });
-        },
+    try{
+      await ensureFriendsPageCache(false);
+      const mine = await fetchMyPeerAssessments(firebaseUser.uid);
+      mine.sort((a, b) => {
+        const at = a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0;
+        const bt = b.updatedAt && b.updatedAt.toMillis ? b.updatedAt.toMillis() : 0;
+        return bt - at;
       });
-    });
+      const { friendProfiles } = friendsPageCache;
+      mine.forEach(a => {
+        const profile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
+        const targetName = profile.nickname || a.targetNameRaw || t('anon');
+        const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
+        const visible = a.visibleToTarget !== false;
+        appendAssessmentRow(el, {
+          title: `${lang === 'en' ? 'Target: ' : '対象者: '}${escapeHTML(targetName)}${linkedNote}`,
+          meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+          groupTotals: a.groupTotals,
+          levelMap: levelsFromAssessment(a),
+          editable: true,
+          onEdit: () => loadFirestoreEntriesIntoEditor(targetName, a.entries),
+          extraControlsHTML: `
+            <label class="my-record-toggle">
+              <input type="checkbox" class="my-record-vis-toggle" ${visible ? 'checked' : ''}>
+              <span>${lang === 'en' ? 'Show to this person' : '相手に見せる'}</span>
+            </label>`,
+          wireExtra: (row) => {
+            row.querySelector('.my-record-vis-toggle').addEventListener('change', async (e) => {
+              try{ await setAssessmentVisibleToTarget(a.id, e.target.checked); }
+              catch(err){ console.warn('setAssessmentVisibleToTarget failed:', err); e.target.checked = !e.target.checked; }
+            });
+          },
+        });
+      });
+    }catch(err){ console.warn('loadPeerAssessedByMe (internet part) failed:', err); }
+    appendLocalGroupRows(el, entries, myName, 'meToOther');
+    if(!el.children.length){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? "You haven't assessed anyone else yet." : 'まだ他人を鑑定した記録がありません。'}</div>`;
+    }
   }catch(err){
     console.warn('loadPeerAssessedByMe error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -3510,7 +3540,7 @@ async function loadPeerAssessedByMe(){
 }
 
 async function loadOthersAssessedMe(){
-  const el = document.getElementById('othersAssessedMeContent');
+  const el = document.getElementById('group2Content');
   if(!el) return;
   if(!firebaseUser){
     el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see assessments others made of you.' : 'Googleでログインすると、他人から鑑定された記録を見られます。'}</div>`;
@@ -3518,25 +3548,28 @@ async function loadOthersAssessedMe(){
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    await ensureFriendsPageCache(false);
-    const { peerAssessments, friendProfiles } = friendsPageCache;
-    if(peerAssessments.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No one has assessed you yet.' : 'まだ誰からも鑑定されていません。'}</div>`;
-      return;
-    }
+    const { myName, entries } = await ensureDataPageLocalContext();
     el.innerHTML = '';
-    peerAssessments.forEach(a => {
-      const profile = friendProfiles[a.authorUid] || {};
-      const name = profile.nickname || a.reviewerDisplayName || t('anon');
-      const row = appendAssessmentRow(el, {
-        title: escapeHTML(name),
-        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
-        groupTotals: a.groupTotals,
-        levelMap: levelsFromAssessment(a),
-        editable: false,
+    try{
+      await ensureFriendsPageCache(false);
+      const { peerAssessments, friendProfiles } = friendsPageCache;
+      peerAssessments.forEach(a => {
+        const profile = friendProfiles[a.authorUid] || {};
+        const name = profile.nickname || a.reviewerDisplayName || t('anon');
+        const row = appendAssessmentRow(el, {
+          title: escapeHTML(name),
+          meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+          groupTotals: a.groupTotals,
+          levelMap: levelsFromAssessment(a),
+          editable: false,
+        });
+        appendImportButton(row, reviewerName || '', a);
       });
-      appendImportButton(row, reviewerName || '', a);
-    });
+    }catch(err){ console.warn('loadOthersAssessedMe (internet part) failed:', err); }
+    appendLocalGroupRows(el, entries, myName, 'otherToMe');
+    if(!el.children.length){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No one has assessed you yet.' : 'まだ誰からも鑑定されていません。'}</div>`;
+    }
   }catch(err){
     console.warn('loadOthersAssessedMe error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -3547,7 +3580,7 @@ async function loadDataPeerReviewStats(){
   const el = document.getElementById('dataPeerReview');
   if(!el) return;
   if(!firebaseUser){
-    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see stats on how others assessed you.' : 'Googleでログインすると、他人から鑑定された統計を見られます。'}</div>`;
+    el.innerHTML = '';
     return;
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
@@ -3561,42 +3594,41 @@ async function loadDataPeerReviewStats(){
 }
 
 async function loadOthersAssessedOthers(){
-  const el = document.getElementById('othersAssessedOthersContent');
+  const el = document.getElementById('group5Content');
   if(!el) return;
   if(!firebaseUser){
-    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see what friends assessed about other people.' : 'Googleでログインすると、フレンドが他人を鑑定した記録を見られます。'}</div>`;
+    el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see what others assessed about other people.' : 'Googleでログインすると、他人が他人を鑑定した記録を見られます。'}</div>`;
     return;
   }
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    await ensureFriendsPageCache(false);
-    const { friendUids, friendProfiles } = friendsPageCache;
-    if(friendUids.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No friends yet.' : 'まだフレンドがいません。'}</div>`;
-      return;
-    }
-    const all = await fetchFriendsPeerAssessments(friendUids);
-    const others = all.filter(a => a.visibleToTarget !== false && a.targetUid !== firebaseUser.uid);
-    if(others.length === 0){
-      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Nothing to show yet.' : '該当する記録がありません。'}</div>`;
-      return;
-    }
+    const { myName, entries } = await ensureDataPageLocalContext();
     el.innerHTML = '';
-    others.forEach(a => {
-      const authorProfile = friendProfiles[a.authorUid] || {};
-      const authorName = authorProfile.nickname || a.reviewerDisplayName || t('anon');
-      const targetProfile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
-      const targetName = targetProfile.nickname || a.targetNameRaw || t('anon');
-      const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
-      const row = appendAssessmentRow(el, {
-        title: `${escapeHTML(authorName)} → ${escapeHTML(targetName)}${linkedNote}`,
-        meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
-        groupTotals: a.groupTotals,
-        levelMap: levelsFromAssessment(a),
-        editable: false,
+    try{
+      await ensureFriendsPageCache(false);
+      const { friendUids, friendProfiles } = friendsPageCache;
+      const all = friendUids.length ? await fetchFriendsPeerAssessments(friendUids) : [];
+      const others = all.filter(a => a.visibleToTarget !== false && a.targetUid !== firebaseUser.uid);
+      others.forEach(a => {
+        const authorProfile = friendProfiles[a.authorUid] || {};
+        const authorName = authorProfile.nickname || a.reviewerDisplayName || t('anon');
+        const targetProfile = a.targetUid ? (friendProfiles[a.targetUid] || {}) : {};
+        const targetName = targetProfile.nickname || a.targetNameRaw || t('anon');
+        const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
+        const row = appendAssessmentRow(el, {
+          title: `${escapeHTML(authorName)} → ${escapeHTML(targetName)}${linkedNote}`,
+          meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+          groupTotals: a.groupTotals,
+          levelMap: levelsFromAssessment(a),
+          editable: false,
+        });
+        appendImportButton(row, targetName, a);
       });
-      appendImportButton(row, targetName, a);
-    });
+    }catch(err){ console.warn('loadOthersAssessedOthers (internet part) failed:', err); }
+    appendLocalGroupRows(el, entries, myName, 'otherToOther');
+    if(!el.children.length){
+      el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Nothing to show yet.' : '該当する記録がありません。'}</div>`;
+    }
   }catch(err){
     console.warn('loadOthersAssessedOthers error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
@@ -5220,12 +5252,11 @@ function applyStaticTranslations(){
   document.getElementById('navDataLabel').textContent = t('navData');
   document.getElementById('dataTitleEl').textContent = t('dataTitle');
   document.getElementById('dataSubtitleEl').textContent = t('dataSubtitle');
-  document.getElementById('myRecordsTitleEl').textContent = t('myRecordsTitle');
-  document.getElementById('mySelfTitleEl').textContent = t('mySelfTitle');
-  document.getElementById('friendsSelfTitleEl').textContent = t('friendsSelfTitle');
-  document.getElementById('peerAssessedTitleEl').textContent = t('peerAssessedTitle');
-  document.getElementById('othersAssessedMeTitleEl').textContent = t('othersAssessedMeTitle');
-  document.getElementById('othersAssessedOthersTitleEl').textContent = t('othersAssessedOthersTitle');
+  document.getElementById('group1TitleEl').textContent = t('group1Title');
+  document.getElementById('group2TitleEl').textContent = t('group2Title');
+  document.getElementById('group3TitleEl').textContent = t('group3Title');
+  document.getElementById('group4TitleEl').textContent = t('group4Title');
+  document.getElementById('group5TitleEl').textContent = t('group5Title');
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
@@ -5512,7 +5543,6 @@ function showPage(pageName){
   if(pageName === 'data'){
     renderDataTabs();
     loadDataStats();
-    loadMyRecords();
     loadMySelfAssessment();
     loadFriendsSelfList();
     loadPeerAssessedByMe();
