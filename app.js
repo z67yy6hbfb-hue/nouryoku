@@ -284,6 +284,217 @@ const ACTIVITY_CATEGORY_OPTIONS = [
   {v:'sports_team', l:'運動部(体育会系)'}, {v:'arts_music', l:'芸術・音楽系'}, {v:'culture_academic', l:'文化部・学術系'},
   {v:'outdoor', l:'アウトドア'}, {v:'gaming_esports', l:'ゲーム・eスポーツ'}, {v:'volunteer', l:'ボランティア・社会活動'},
 ];
+
+/* --- 資格・検定カタログ(マイページの検索登録用) --- */
+const CERTIFICATION_CATALOG = [
+  // IT・情報処理
+  { name:'ITパスポート', category:'IT', aliases:['IP'] },
+  { name:'情報セキュリティマネジメント試験', category:'IT', aliases:['SG'] },
+  { name:'基本情報技術者試験', category:'IT', aliases:['FE','きほんじょうほう'] },
+  { name:'応用情報技術者試験', category:'IT', aliases:['AP'] },
+  { name:'ITストラテジスト試験', category:'IT', aliases:['ST'] },
+  { name:'システムアーキテクト試験', category:'IT', aliases:['SA'] },
+  { name:'プロジェクトマネージャ試験', category:'IT', aliases:['PM'] },
+  { name:'ネットワークスペシャリスト試験', category:'IT', aliases:['NW'] },
+  { name:'データベーススペシャリスト試験', category:'IT', aliases:['DB'] },
+  { name:'エンベデッドシステムスペシャリスト試験', category:'IT', aliases:['ES'] },
+  { name:'ITサービスマネージャ試験', category:'IT', aliases:['SM'] },
+  { name:'システム監査技術者試験', category:'IT', aliases:['AU'] },
+  { name:'情報処理安全確保支援士試験', category:'IT', aliases:['SC','登録セキスペ'] },
+  { name:'CCNA', category:'IT' },
+  { name:'CCNP', category:'IT' },
+  { name:'LPIC-1', category:'IT' },
+  { name:'LPIC-2', category:'IT' },
+  { name:'LinuCレベル1', category:'IT' },
+  { name:'LinuCレベル2', category:'IT' },
+  { name:'Oracle認定Javaプログラマ Bronze', category:'IT' },
+  { name:'Oracle認定Javaプログラマ Silver', category:'IT' },
+  { name:'Oracle認定Javaプログラマ Gold', category:'IT' },
+  { name:'ORACLE MASTER Bronze', category:'IT' },
+  { name:'ORACLE MASTER Silver', category:'IT' },
+  { name:'ORACLE MASTER Gold', category:'IT' },
+  { name:'AWS認定ソリューションアーキテクト – アソシエイト', category:'IT', aliases:['AWS SAA'] },
+  { name:'AWS認定ソリューションアーキテクト – プロフェッショナル', category:'IT', aliases:['AWS SAP'] },
+  { name:'AWS認定クラウドプラクティショナー', category:'IT', aliases:['AWS CLF'] },
+  { name:'Microsoft Azure Fundamentals', category:'IT', aliases:['AZ-900'] },
+  { name:'Google Cloud認定資格', category:'IT' },
+  { name:'CompTIA A+', category:'IT' },
+  { name:'CompTIA Security+', category:'IT' },
+  { name:'PMP(Project Management Professional)', category:'IT' },
+  { name:'ITIL ファンデーション', category:'IT' },
+  { name:'統計検定', category:'IT' },
+  { name:'Python3エンジニア認定基礎試験', category:'IT' },
+  { name:'G検定(ディープラーニング)', category:'IT' },
+  { name:'E資格(ディープラーニング)', category:'IT' },
+  { name:'MOS Word', category:'IT', aliases:['マイクロソフトオフィススペシャリスト'] },
+  { name:'MOS Excel', category:'IT' },
+  { name:'MOS PowerPoint', category:'IT' },
+
+  // 語学
+  { name:'実用英語技能検定1級', category:'語学', aliases:['英検1級'] },
+  { name:'実用英語技能検定準1級', category:'語学', aliases:['英検準1級'] },
+  { name:'実用英語技能検定2級', category:'語学', aliases:['英検2級'] },
+  { name:'実用英語技能検定準2級', category:'語学', aliases:['英検準2級'] },
+  { name:'実用英語技能検定3級', category:'語学', aliases:['英検3級'] },
+  { name:'TOEIC L&R', category:'語学', aliases:['トーイック'] },
+  { name:'TOEIC S&W', category:'語学' },
+  { name:'TOEFL iBT', category:'語学' },
+  { name:'IELTS', category:'語学' },
+  { name:'中国語検定試験', category:'語学', aliases:['中検'] },
+  { name:'HSK漢語水平考試', category:'語学' },
+  { name:'実用フランス語技能検定', category:'語学', aliases:['仏検'] },
+  { name:'ドイツ語技能検定', category:'語学', aliases:['独検'] },
+  { name:'ハングル能力検定試験', category:'語学' },
+  { name:'実用イタリア語検定', category:'語学' },
+  { name:'スペイン語技能検定', category:'語学' },
+  { name:'日本語能力試験', category:'語学', aliases:['JLPT'] },
+  { name:'通訳案内士', category:'語学' },
+
+  // ビジネス・会計・金融
+  { name:'日商簿記検定1級', category:'ビジネス・会計' },
+  { name:'日商簿記検定2級', category:'ビジネス・会計' },
+  { name:'日商簿記検定3級', category:'ビジネス・会計' },
+  { name:'公認会計士', category:'ビジネス・会計' },
+  { name:'税理士', category:'ビジネス・会計' },
+  { name:'ファイナンシャル・プランニング技能士1級', category:'ビジネス・会計', aliases:['FP1級'] },
+  { name:'ファイナンシャル・プランニング技能士2級', category:'ビジネス・会計', aliases:['FP2級'] },
+  { name:'ファイナンシャル・プランニング技能士3級', category:'ビジネス・会計', aliases:['FP3級'] },
+  { name:'AFP', category:'ビジネス・会計' },
+  { name:'CFP', category:'ビジネス・会計' },
+  { name:'中小企業診断士', category:'ビジネス・会計' },
+  { name:'ビジネス実務法務検定試験1級', category:'ビジネス・会計' },
+  { name:'ビジネス実務法務検定試験2級', category:'ビジネス・会計' },
+  { name:'ビジネス実務法務検定試験3級', category:'ビジネス・会計' },
+  { name:'秘書検定1級', category:'ビジネス・会計' },
+  { name:'秘書検定準1級', category:'ビジネス・会計' },
+  { name:'秘書検定2級', category:'ビジネス・会計' },
+  { name:'秘書検定3級', category:'ビジネス・会計' },
+  { name:'証券外務員一種', category:'ビジネス・会計' },
+  { name:'証券外務員二種', category:'ビジネス・会計' },
+  { name:'貸金業務取扱主任者', category:'ビジネス・会計' },
+  { name:'社会保険労務士', category:'ビジネス・会計' },
+  { name:'通関士', category:'ビジネス・会計' },
+  { name:'販売士(リテールマーケティング)1級', category:'ビジネス・会計' },
+  { name:'販売士(リテールマーケティング)2級', category:'ビジネス・会計' },
+  { name:'販売士(リテールマーケティング)3級', category:'ビジネス・会計' },
+  { name:'色彩検定1級', category:'ビジネス・会計' },
+  { name:'色彩検定2級', category:'ビジネス・会計' },
+  { name:'色彩検定3級', category:'ビジネス・会計' },
+
+  // 法律
+  { name:'司法試験', category:'法律' },
+  { name:'司法試験予備試験', category:'法律' },
+  { name:'司法書士', category:'法律' },
+  { name:'行政書士', category:'法律' },
+  { name:'弁理士', category:'法律' },
+  { name:'知的財産管理技能検定1級', category:'法律' },
+  { name:'知的財産管理技能検定2級', category:'法律' },
+  { name:'知的財産管理技能検定3級', category:'法律' },
+
+  // 医療・福祉
+  { name:'医師国家試験', category:'医療・福祉' },
+  { name:'看護師国家試験', category:'医療・福祉' },
+  { name:'准看護師', category:'医療・福祉' },
+  { name:'薬剤師国家試験', category:'医療・福祉' },
+  { name:'歯科医師国家試験', category:'医療・福祉' },
+  { name:'理学療法士', category:'医療・福祉' },
+  { name:'作業療法士', category:'医療・福祉' },
+  { name:'言語聴覚士', category:'医療・福祉' },
+  { name:'管理栄養士', category:'医療・福祉' },
+  { name:'栄養士', category:'医療・福祉' },
+  { name:'介護福祉士', category:'医療・福祉' },
+  { name:'介護支援専門員', category:'医療・福祉', aliases:['ケアマネージャー'] },
+  { name:'社会福祉士', category:'医療・福祉' },
+  { name:'精神保健福祉士', category:'医療・福祉' },
+  { name:'保育士', category:'医療・福祉' },
+  { name:'柔道整復師', category:'医療・福祉' },
+  { name:'あん摩マッサージ指圧師', category:'医療・福祉' },
+  { name:'はり師・きゅう師', category:'医療・福祉' },
+  { name:'登録販売者', category:'医療・福祉' },
+  { name:'臨床検査技師', category:'医療・福祉' },
+  { name:'診療放射線技師', category:'医療・福祉' },
+  { name:'救急救命士', category:'医療・福祉' },
+
+  // 建築・技術・工事
+  { name:'一級建築士', category:'建築・技術' },
+  { name:'二級建築士', category:'建築・技術' },
+  { name:'木造建築士', category:'建築・技術' },
+  { name:'建築施工管理技士1級', category:'建築・技術' },
+  { name:'建築施工管理技士2級', category:'建築・技術' },
+  { name:'土木施工管理技士1級', category:'建築・技術' },
+  { name:'土木施工管理技士2級', category:'建築・技術' },
+  { name:'電気工事施工管理技士1級', category:'建築・技術' },
+  { name:'電気工事施工管理技士2級', category:'建築・技術' },
+  { name:'管工事施工管理技士1級', category:'建築・技術' },
+  { name:'管工事施工管理技士2級', category:'建築・技術' },
+  { name:'第一種電気工事士', category:'建築・技術' },
+  { name:'第二種電気工事士', category:'建築・技術' },
+  { name:'電験三種', category:'建築・技術', aliases:['第三種電気主任技術者'] },
+  { name:'電験二種', category:'建築・技術', aliases:['第二種電気主任技術者'] },
+  { name:'電験一種', category:'建築・技術', aliases:['第一種電気主任技術者'] },
+  { name:'技術士', category:'建築・技術' },
+  { name:'技術士補', category:'建築・技術' },
+  { name:'危険物取扱者甲種', category:'建築・技術' },
+  { name:'危険物取扱者乙種4類', category:'建築・技術' },
+  { name:'ボイラー技士1級', category:'建築・技術' },
+  { name:'ボイラー技士2級', category:'建築・技術' },
+  { name:'高圧ガス製造保安責任者', category:'建築・技術' },
+  { name:'衛生管理者第一種', category:'建築・技術' },
+  { name:'衛生管理者第二種', category:'建築・技術' },
+  { name:'測量士', category:'建築・技術' },
+  { name:'測量士補', category:'建築・技術' },
+  { name:'宅地建物取引士', category:'建築・技術', aliases:['宅建'] },
+  { name:'マンション管理士', category:'建築・技術' },
+  { name:'管理業務主任者', category:'建築・技術' },
+  { name:'インテリアコーディネーター', category:'建築・技術' },
+  { name:'CAD利用技術者試験1級', category:'建築・技術' },
+  { name:'CAD利用技術者試験2級', category:'建築・技術' },
+
+  // 運転・輸送
+  { name:'普通自動車第一種運転免許', category:'運転・輸送' },
+  { name:'準中型自動車免許', category:'運転・輸送' },
+  { name:'中型自動車免許', category:'運転・輸送' },
+  { name:'大型自動車免許', category:'運転・輸送' },
+  { name:'普通自動二輪免許', category:'運転・輸送' },
+  { name:'大型自動二輪免許', category:'運転・輸送' },
+  { name:'大型自動車第二種免許', category:'運転・輸送' },
+  { name:'けん引免許', category:'運転・輸送' },
+  { name:'フォークリフト運転技能講習修了証', category:'運転・輸送' },
+  { name:'玉掛け技能講習修了証', category:'運転・輸送' },
+
+  // 教育・保育
+  { name:'小学校教諭免許状', category:'教育' },
+  { name:'中学校教諭免許状', category:'教育' },
+  { name:'高等学校教諭免許状', category:'教育' },
+  { name:'幼稚園教諭免許状', category:'教育' },
+  { name:'特別支援学校教諭免許状', category:'教育' },
+  { name:'日本語教育能力検定試験', category:'教育' },
+  { name:'キャリアコンサルタント', category:'教育' },
+
+  // その他
+  { name:'気象予報士', category:'その他' },
+  { name:'旅行業務取扱管理者(総合)', category:'その他' },
+  { name:'旅行業務取扱管理者(国内)', category:'その他' },
+  { name:'調理師', category:'その他' },
+  { name:'製菓衛生師', category:'その他' },
+  { name:'食品衛生責任者', category:'その他' },
+  { name:'美容師', category:'その他' },
+  { name:'理容師', category:'その他' },
+  { name:'ネイリスト技能検定', category:'その他' },
+  { name:'ソムリエ', category:'その他' },
+  { name:'きき酒師', category:'その他' },
+  { name:'パーソナルカラリスト検定', category:'その他' },
+];
+function normalizeCertQuery(s){ return (s || '').toString().trim().toLowerCase(); }
+function certSearchResults(query, excludeNames){
+  const q = normalizeCertQuery(query);
+  if(!q) return [];
+  const exclude = new Set(excludeNames || []);
+  return CERTIFICATION_CATALOG
+    .filter(c => !exclude.has(c.name))
+    .filter(c => normalizeCertQuery(c.name).includes(q) || (c.aliases || []).some(a => normalizeCertQuery(a).includes(q)))
+    .slice(0, 8);
+}
 const SEGMENT_OPTIONS = [
   {v:'sports_club', l:'運動部出身'}, {v:'arts_music', l:'芸術・音楽系'},
   {v:'mbti_t', l:'MBTI思考型(T)'}, {v:'mbti_f', l:'MBTI感情型(F)'},
@@ -315,10 +526,11 @@ async function loadMyProfileAttributes(){
   const data = snap.exists ? snap.data() : {};
   myProfileAttrs = Object.assign({
     nickname: '', ageGroup: null, gender: null, mbti: { EI:null, SN:null, TF:null, JP:null },
-    birthOrder: null, educationCategory: null, careerField: null, activityCategories: [],
+    birthOrder: null, educationCategory: null, careerField: null, activityCategories: [], certifications: [],
   }, data);
   if(!myProfileAttrs.mbti) myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
   if(!myProfileAttrs.activityCategories) myProfileAttrs.activityCategories = [];
+  if(!myProfileAttrs.certifications) myProfileAttrs.certifications = [];
 }
 
 async function saveMyProfileAttributes(){
@@ -340,6 +552,54 @@ function mpFieldHTML(fieldKey){
     <span class="mp-field-label">${field.label}</span>
     <div class="mp-chip-group" data-field="${fieldKey}">${chipButtonsHTML(field.options, myProfileAttrs[fieldKey])}</div>
   </div>`;
+}
+
+function certChipsHTML(){
+  const certs = myProfileAttrs.certifications || [];
+  if(certs.length === 0) return '<div class="mp-cert-empty">まだ登録された資格はありません</div>';
+  return certs.map((name, idx) => `<span class="mp-chip mp-cert-chip" data-idx="${idx}">${escapeHTML(name)}<span class="mp-cert-remove" data-remove="${idx}">✕</span></span>`).join('');
+}
+function renderCertChips(){
+  const container = document.getElementById('certChipsContainer');
+  if(!container) return;
+  container.innerHTML = certChipsHTML();
+  container.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      myProfileAttrs.certifications.splice(Number(btn.dataset.remove), 1);
+      renderCertChips();
+    });
+  });
+}
+function addCertification(name){
+  const trimmed = (name || '').trim().slice(0, 40);
+  if(!trimmed) return;
+  if(!myProfileAttrs.certifications) myProfileAttrs.certifications = [];
+  if(myProfileAttrs.certifications.includes(trimmed)) return;
+  myProfileAttrs.certifications.push(trimmed);
+  renderCertChips();
+}
+function renderCertSuggestions(input, suggestionsEl){
+  const query = input.value;
+  const trimmed = query.trim();
+  if(!trimmed){ suggestionsEl.innerHTML = ''; suggestionsEl.style.display = 'none'; return; }
+  const results = certSearchResults(query, myProfileAttrs.certifications);
+  let html = results.map(c => `<div class="mp-cert-suggestion-item" data-name="${escapeHTML(c.name)}"><span>${escapeHTML(c.name)}</span><span class="mp-cert-suggestion-cat">${escapeHTML(c.category || '')}</span></div>`).join('');
+  const exactExists = CERTIFICATION_CATALOG.some(c => c.name === trimmed) || (myProfileAttrs.certifications || []).includes(trimmed);
+  if(!exactExists){
+    html += `<div class="mp-cert-suggestion-item mp-cert-suggestion-custom" data-name="${escapeHTML(trimmed)}">「${escapeHTML(trimmed)}」を追加</div>`;
+  }
+  suggestionsEl.innerHTML = html || '<div class="mp-cert-suggestion-empty">候補がありません</div>';
+  suggestionsEl.style.display = 'block';
+  suggestionsEl.querySelectorAll('[data-name]').forEach(item => {
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      addCertification(item.dataset.name);
+      input.value = '';
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
+    });
+  });
 }
 
 async function loadMyPage(){
@@ -406,6 +666,17 @@ function renderMyPageUI(){
       </div>
     </div>
 
+    <div class="mp-card">
+      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>資格・検定</div>
+      <div class="mp-field">
+        <div class="mp-chip-group" id="certChipsContainer">${certChipsHTML()}</div>
+      </div>
+      <div class="mp-field mp-cert-search-wrap">
+        <input type="text" id="certSearchInput" class="mp-cert-search-input" placeholder="資格名で検索(例: 基本情報技術者、TOEIC)" autocomplete="off">
+        <div class="mp-cert-suggestions" id="certSuggestions"></div>
+      </div>
+    </div>
+
     <div class="mp-save-bar">
       <button class="mp-save-btn" id="saveProfileAttrsBtn">プロフィールを保存</button>
       <span id="profileAttrsSaveStatus" class="mp-save-status"></span>
@@ -458,6 +729,25 @@ function renderMyPageUI(){
     const avatar = root.querySelector('.mp-avatar');
     if(avatar) avatar.textContent = nicknameInput.value.trim().slice(0, 1) || '鑑';
   });
+  renderCertChips();
+  const certSearchInput = document.getElementById('certSearchInput');
+  const certSuggestions = document.getElementById('certSuggestions');
+  if(certSearchInput && certSuggestions){
+    certSearchInput.addEventListener('input', () => renderCertSuggestions(certSearchInput, certSuggestions));
+    certSearchInput.addEventListener('focus', () => renderCertSuggestions(certSearchInput, certSuggestions));
+    certSearchInput.addEventListener('blur', () => { certSuggestions.style.display = 'none'; });
+    certSearchInput.addEventListener('keydown', (e) => {
+      if(e.key !== 'Enter') return;
+      e.preventDefault();
+      const trimmed = certSearchInput.value.trim();
+      if(!trimmed) return;
+      const results = certSearchResults(certSearchInput.value, myProfileAttrs.certifications);
+      addCertification(results.length ? results[0].name : trimmed);
+      certSearchInput.value = '';
+      certSuggestions.innerHTML = '';
+      certSuggestions.style.display = 'none';
+    });
+  }
   const saveBtn = document.getElementById('saveProfileAttrsBtn');
   if(saveBtn) saveBtn.addEventListener('click', async () => {
     const statusEl = document.getElementById('profileAttrsSaveStatus');
