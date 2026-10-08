@@ -3607,7 +3607,11 @@ async function loadRanking(){
   const listEl = document.getElementById('rankingList');
   listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
-    const entries = await fetchLeaderboardEntries();
+    const [entries] = await Promise.all([
+      fetchLeaderboardEntries(),
+      ensureMyProfileAttrsLoadedIfSignedIn(),
+      ensureOwnerMarkExcludedLoaded(),
+    ]);
     if(entries.length === 0){
       rankEntriesCache = [];
       renderRankModeTabs();
@@ -4594,6 +4598,7 @@ async function loadTitles(){
   const listEl = document.getElementById('titlesList');
   listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
+    await Promise.all([ensureMyProfileAttrsLoadedIfSignedIn(), ensureOwnerMarkExcludedLoaded()]);
     let allEntries = rankEntriesCache;
     if(!allEntries || allEntries.length === 0){
       allEntries = await fetchLeaderboardEntries();
@@ -4623,12 +4628,13 @@ async function loadTitles(){
             singleRules.length ? `<div class="title-tags title-tags-single">${singleRules.map(titleTagPillHTML).join('')}</div>` : '',
             conditionalRules.length ? `<div class="title-tags title-tags-conditional">${renderConditionalPills(conditionalRules)}</div>` : '',
           ].join('');
+      const ownerBadge = ownerMarkHTML(entry.name);
       const row = document.createElement('div');
-      row.className = 'rank-row';
+      row.className = 'rank-row' + (ownerBadge ? ' owner-row' : '');
       row.dataset.key = entry.key;
       row.innerHTML = `
         <div class="rank-info">
-          <div class="rank-name">${escapeHTML(entry.name || t('anon'))}</div>
+          <div class="rank-name">${escapeHTML(entry.name || t('anon'))}${ownerBadge}</div>
           <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}</div>
           ${tagsHTML}
         </div>
@@ -4636,6 +4642,7 @@ async function loadTitles(){
       `;
       listEl.appendChild(row);
     });
+    wireOwnerMarkDismiss(listEl);
     applyTitleCategoryFilter();
   }catch(err){
     console.warn('loadTitles error:', err);
@@ -4652,6 +4659,58 @@ function getRankTier(rank){
   return { key:'c', label:'C' };
 }
 
+/* --- 「主」マーク(マイページの名前と鑑定対象者名/鑑定者名が一致した場合の自分マーク) --- */
+let ownerMarkExcludedNames = null;
+async function ensureOwnerMarkExcludedLoaded(){
+  if(ownerMarkExcludedNames) return;
+  ownerMarkExcludedNames = new Set();
+  if(typeof window.storage === 'undefined') return;
+  try{
+    const res = await window.storage.get('ownerMarkExcluded');
+    if(res && res.value){
+      const arr = JSON.parse(res.value);
+      if(Array.isArray(arr)) arr.forEach(n => ownerMarkExcludedNames.add(n));
+    }
+  }catch(err){ console.warn('ownerMarkExcluded load failed:', err); }
+}
+async function excludeOwnerMark(name){
+  await ensureOwnerMarkExcludedLoaded();
+  ownerMarkExcludedNames.add(name);
+  try{ await window.storage.set('ownerMarkExcluded', JSON.stringify(Array.from(ownerMarkExcludedNames))); }
+  catch(err){ console.warn('ownerMarkExcluded save failed:', err); }
+}
+async function ensureMyProfileAttrsLoadedIfSignedIn(){
+  if(firebaseDb && firebaseUser && !myProfileAttrs){
+    try{ await loadMyProfileAttributes(); }catch(err){ console.warn('loadMyProfileAttributes (owner mark) failed:', err); }
+  }
+}
+function ownerMarkHTML(name){
+  const trimmed = (name || '').trim();
+  if(!trimmed) return '';
+  const myName = ((myProfileAttrs && myProfileAttrs.nickname) || '').trim();
+  if(!myName || trimmed !== myName) return '';
+  if(ownerMarkExcludedNames && ownerMarkExcludedNames.has(trimmed)) return '';
+  const label = lang === 'en' ? 'Owner' : '主';
+  const hint = lang === 'en' ? 'Matches your My Page name' : 'マイページの名前と一致';
+  const dismissHint = lang === 'en' ? 'Not me — dismiss' : '別人なので消す';
+  return `<span class="owner-mark" title="${escapeHTML(hint)}">👑${escapeHTML(label)}<button type="button" class="owner-mark-x" data-owner-mark-dismiss="${escapeHTML(trimmed)}" title="${escapeHTML(dismissHint)}">✕</button></span>`;
+}
+function wireOwnerMarkDismiss(container){
+  container.querySelectorAll('[data-owner-mark-dismiss]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await excludeOwnerMark(btn.dataset.ownerMarkDismiss);
+      // この名前の「主」マークは一意(マイページの名前と一致する人だけ)なので、
+      // コンテナ内に残っている表示は全て同じ名前のもの → まとめて消してよい。
+      container.querySelectorAll('.owner-mark').forEach(mark => mark.remove());
+      container.querySelectorAll('.rank-row.owner-row').forEach(row => {
+        if(!row.querySelector('.owner-mark')) row.classList.remove('owner-row');
+      });
+    });
+  });
+}
+
 function renderRankingList(mode){
   const listEl = document.getElementById('rankingList');
   const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === currentRankMainMode && e.rankingVisible !== false);
@@ -4664,19 +4723,21 @@ function renderRankingList(mode){
     const byDate = filtered.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, RANKING_DISPLAY_LIMIT);
     listEl.innerHTML = '';
     byDate.forEach(entry => {
+      const ownerBadge = ownerMarkHTML(entry.name);
       const row = document.createElement('div');
-      row.className = 'rank-row';
+      row.className = 'rank-row' + (ownerBadge ? ' owner-row' : '');
       row.dataset.key = entry.key;
       row.innerHTML = `
         <div class="rank-info">
-          <div class="rank-name">${escapeHTML(entry.name || t('anon'))}</div>
-          <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}` : ''} · ${lang==='en'?'double-tap to view coefficients':'ダブルタップで係数を確認'}</div>
+          <div class="rank-name">${escapeHTML(entry.name || t('anon'))}${ownerBadge}</div>
+          <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}${ownerMarkHTML(entry.reviewerName)}` : ''} · ${lang==='en'?'double-tap to view coefficients':'ダブルタップで係数を確認'}</div>
         </div>
         <button class="rank-delete" data-key="${entry.key}" title="${lang==='en'?'Delete':'削除'}">✕</button>
       `;
       row.addEventListener('dblclick', () => toggleCoefBreakdown(row, entry));
       listEl.appendChild(row);
     });
+    wireOwnerMarkDismiss(listEl);
     return;
   }
 
@@ -4701,8 +4762,9 @@ function renderRankingList(mode){
     const value = isTotal
       ? `¥${(entry.yen || 0).toLocaleString('ja-JP')}`
       : `${((entry.groupTotals && entry.groupTotals[gi]) || 0).toFixed(1)} ${t('pt')}`;
+    const ownerBadge = ownerMarkHTML(entry.name);
     const row = document.createElement('div');
-    row.className = 'rank-row';
+    row.className = 'rank-row' + (ownerBadge ? ' owner-row' : '');
     row.dataset.key = entry.key;
     const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
     const popClass = (top3Changed && rank <= 3) ? ' rank-pop' : '';
@@ -4711,8 +4773,8 @@ function renderRankingList(mode){
     row.innerHTML = `
       <div class="rank-badge ${badgeClass}${popClass}" style="animation-delay:${popDelay}s">${medalEmoji || rank}</div>
       <div class="rank-info">
-        <div class="rank-name"><span class="tier-badge tier-${tier.key}">${tier.label}</span>${escapeHTML(entry.name || t('anon'))}${editable ? ` <span style="font-size:10px;color:var(--ink-soft);">(${lang==='en'?'double-tap to edit':'ダブルタップで編集'})</span>` : ''}</div>
-        <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}` : ''}</div>
+        <div class="rank-name"><span class="tier-badge tier-${tier.key}">${tier.label}</span>${escapeHTML(entry.name || t('anon'))}${ownerBadge}${editable ? ` <span style="font-size:10px;color:var(--ink-soft);">(${lang==='en'?'double-tap to edit':'ダブルタップで編集'})</span>` : ''}</div>
+        <div class="rank-date">${fmtDate(entry.date)} ${t('appraisedSuffix')}${entry.reviewerName ? ` · ${t('reviewerPrefix')} ${escapeHTML(entry.reviewerName)}${ownerMarkHTML(entry.reviewerName)}` : ''}</div>
       </div>
       <div class="rank-amount">${value}</div>
       <button class="rank-delete" data-key="${entry.key}" title="${lang==='en'?'Delete':'削除'}">✕</button>
@@ -4722,6 +4784,7 @@ function renderRankingList(mode){
     }
     listEl.appendChild(row);
   });
+  wireOwnerMarkDismiss(listEl);
 }
 
 function toggleCoefBreakdown(row, entry){
