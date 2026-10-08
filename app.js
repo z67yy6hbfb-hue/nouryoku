@@ -3485,22 +3485,60 @@ function localOthersEntryRowOpts(entry, myName){
     }) : undefined,
   };
 }
-function applyOthersHighlight(){
+let othersRowsData = [];
+let currentOthersSort = 'date_desc';
+const OTHERS_SORT_COMPARATORS = {
+  date_desc: (a, b) => b.dateMs - a.dateMs,
+  date_asc: (a, b) => a.dateMs - b.dateMs,
+  amount_desc: (a, b) => b.amountYen - a.amountYen,
+  amount_asc: (a, b) => a.amountYen - b.amountYen,
+};
+function renderOthersSortTabs(){
+  const el = document.getElementById('othersSortTabs');
+  if(!el) return;
+  const modes = [
+    { key:'date_desc', label: lang === 'en' ? 'Newest' : '新しい順' },
+    { key:'date_asc', label: lang === 'en' ? 'Oldest' : '古い順' },
+    { key:'amount_desc', label: lang === 'en' ? 'Highest' : '金額が高い順' },
+    { key:'amount_asc', label: lang === 'en' ? 'Lowest' : '金額が低い順' },
+  ];
+  el.innerHTML = modes.map(m => `<button class="catalog-sort-btn${m.key === currentOthersSort ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
+  el.querySelectorAll('.catalog-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentOthersSort = btn.dataset.mode;
+      el.querySelectorAll('.catalog-sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyOthersSortAndFilter();
+    });
+  });
+}
+// 検索に一致する行を先頭へ、それ以外は選択中の並び順で後ろに続ける。
+// Array.sort は安定ソートなので、一致/非一致を第一キーにすれば
+// 並び順を壊さずに一致行だけを上に持ってこられる。
+function applyOthersSortAndFilter(){
   const container = document.getElementById('othersContent');
   const input = document.getElementById('othersSearchInput');
   if(!container || !input) return;
   const q = input.value.trim().toLowerCase();
   const myName = ((myProfileAttrs && myProfileAttrs.nickname) || '').trim();
-  container.querySelectorAll('.my-record-row').forEach(row => {
-    const reviewer = (row.dataset.reviewer || '').toLowerCase();
-    const target = (row.dataset.target || '').toLowerCase();
-    const match = q ? (reviewer.includes(q) || target.includes(q)) : (!!myName && row.dataset.reviewer === myName);
-    row.classList.toggle('selected-row', match);
+  const isMatch = (rd) => q
+    ? (rd.reviewer.toLowerCase().includes(q) || rd.target.toLowerCase().includes(q))
+    : (!!myName && rd.reviewer === myName);
+  const comparator = OTHERS_SORT_COMPARATORS[currentOthersSort] || OTHERS_SORT_COMPARATORS.date_desc;
+  const sorted = othersRowsData.slice().sort((a, b) => {
+    const am = isMatch(a) ? 0 : 1;
+    const bm = isMatch(b) ? 0 : 1;
+    if(am !== bm) return am - bm;
+    return comparator(a, b);
+  });
+  sorted.forEach(rd => {
+    container.appendChild(rd.el);
+    rd.el.classList.toggle('selected-row', isMatch(rd));
   });
 }
 (function initOthersSearch(){
   const input = document.getElementById('othersSearchInput');
-  if(input) input.addEventListener('input', applyOthersHighlight);
+  if(input) input.addEventListener('input', applyOthersSortAndFilter);
 })();
 
 async function loadOthersAssessments(){
@@ -3529,6 +3567,7 @@ async function loadOthersAssessments(){
         const reviewerDisplay = myName || reviewerName || t('anon');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
+          amountYen: Math.round((a.total || 0) * 10000),
           reviewer: reviewerDisplay, target: targetName,
           build: (container) => appendAssessmentRow(container, {
             title: othersEntryTitle(reviewerDisplay, targetName, linkedNote),
@@ -3558,6 +3597,7 @@ async function loadOthersAssessments(){
         const name = profile.nickname || a.reviewerDisplayName || t('anon');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
+          amountYen: Math.round((a.total || 0) * 10000),
           reviewer: name, target: name,
           build: (container) => {
             const row = appendAssessmentRow(container, {
@@ -3584,6 +3624,7 @@ async function loadOthersAssessments(){
         const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
+          amountYen: Math.round((a.total || 0) * 10000),
           reviewer: authorName, target: targetName,
           build: (container) => {
             const row = appendAssessmentRow(container, {
@@ -3608,21 +3649,24 @@ async function loadOthersAssessments(){
       .forEach(entry => {
         rowBuilders.push({
           dateMs: new Date(entry.date).getTime() || 0,
+          amountYen: entry.yen || 0,
           reviewer: entry.reviewerName || '', target: entry.name || '',
           build: (container) => appendAssessmentRow(container, localOthersEntryRowOpts(entry, myName)),
         });
       });
 
     rowBuilders.sort((a, b) => b.dateMs - a.dateMs);
-    rowBuilders.forEach(rb => {
+    othersRowsData = rowBuilders.map(rb => {
       const row = rb.build(el);
       row.dataset.reviewer = rb.reviewer;
       row.dataset.target = rb.target;
+      return { el: row, reviewer: rb.reviewer, target: rb.target, dateMs: rb.dateMs, amountYen: rb.amountYen };
     });
     if(!el.children.length){
       el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Nothing to show yet.' : '該当する記録がありません。'}</div>`;
     }
-    applyOthersHighlight();
+    renderOthersSortTabs();
+    applyOthersSortAndFilter();
   }catch(err){
     console.warn('loadOthersAssessments error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;

@@ -800,7 +800,7 @@
   }
   .rank-mode-tab.active{background:linear-gradient(135deg,#8b5cf6,#2f7dd1); border-color:var(--ink); color:#fff;}
 
-  .catalog-sort-tabs{display:flex; justify-content:flex-end; gap:6px; margin-bottom:10px;}
+  .catalog-sort-tabs{display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin-bottom:10px;}
   .catalog-sort-btn{
     font-size:11px; padding:5px 10px; border:1.5px solid var(--ink); border-radius:12px;
     background:transparent; color:var(--ink); cursor:pointer; font-family:'Zen Kaku Gothic New', sans-serif;
