@@ -331,22 +331,27 @@ const CERTIFICATION_CATALOG = [
   { name:'MOS PowerPoint', category:'IT' },
 
   // 語学
-  { name:'実用英語技能検定1級', category:'語学', aliases:['英検1級'] },
-  { name:'実用英語技能検定準1級', category:'語学', aliases:['英検準1級'] },
-  { name:'実用英語技能検定2級', category:'語学', aliases:['英検2級'] },
-  { name:'実用英語技能検定準2級', category:'語学', aliases:['英検準2級'] },
-  { name:'実用英語技能検定3級', category:'語学', aliases:['英検3級'] },
+  { name:'実用英語技能検定1級', category:'語学', aliases:['英検1級','英語検定1級'] },
+  { name:'実用英語技能検定準1級', category:'語学', aliases:['英検準1級','英語検定準1級'] },
+  { name:'実用英語技能検定2級', category:'語学', aliases:['英検2級','英語検定2級'] },
+  { name:'実用英語技能検定準2級', category:'語学', aliases:['英検準2級','英語検定準2級'] },
+  { name:'実用英語技能検定3級', category:'語学', aliases:['英検3級','英語検定3級'] },
   { name:'TOEIC L&R', category:'語学', aliases:['トーイック'] },
   { name:'TOEIC S&W', category:'語学' },
   { name:'TOEFL iBT', category:'語学' },
   { name:'IELTS', category:'語学' },
-  { name:'中国語検定試験', category:'語学', aliases:['中検'] },
+  { name:'日本漢字能力検定1級', category:'語学', aliases:['漢検1級','漢字検定1級'] },
+  { name:'日本漢字能力検定準1級', category:'語学', aliases:['漢検準1級','漢字検定準1級'] },
+  { name:'日本漢字能力検定2級', category:'語学', aliases:['漢検2級','漢字検定2級'] },
+  { name:'日本漢字能力検定準2級', category:'語学', aliases:['漢検準2級','漢字検定準2級'] },
+  { name:'日本漢字能力検定3級', category:'語学', aliases:['漢検3級','漢字検定3級'] },
+  { name:'中国語検定試験', category:'語学', aliases:['中検','中国語検定'] },
   { name:'HSK漢語水平考試', category:'語学' },
-  { name:'実用フランス語技能検定', category:'語学', aliases:['仏検'] },
-  { name:'ドイツ語技能検定', category:'語学', aliases:['独検'] },
-  { name:'ハングル能力検定試験', category:'語学' },
-  { name:'実用イタリア語検定', category:'語学' },
-  { name:'スペイン語技能検定', category:'語学' },
+  { name:'実用フランス語技能検定', category:'語学', aliases:['仏検','フランス語検定'] },
+  { name:'ドイツ語技能検定', category:'語学', aliases:['独検','ドイツ語検定'] },
+  { name:'ハングル能力検定試験', category:'語学', aliases:['ハングル検定','韓国語検定'] },
+  { name:'実用イタリア語検定', category:'語学', aliases:['イタリア語検定'] },
+  { name:'スペイン語技能検定', category:'語学', aliases:['スペイン語検定'] },
   { name:'日本語能力試験', category:'語学', aliases:['JLPT'] },
   { name:'通訳案内士', category:'語学' },
 
@@ -486,14 +491,33 @@ const CERTIFICATION_CATALOG = [
   { name:'パーソナルカラリスト検定', category:'その他' },
 ];
 function normalizeCertQuery(s){ return (s || '').toString().trim().toLowerCase(); }
+// クエリの文字が順序通り(間に他の文字を挟んでもよい)target内に現れるか。
+// 「実用英語技能検定」のように正式名称に「技能」「能力」等が挟まる資格でも、
+// 「英語検定」のような省略した言い方で検索できるようにするための緩い一致判定。
+function certFuzzyIncludes(target, query){
+  let ti = 0;
+  for(const ch of query){
+    ti = target.indexOf(ch, ti);
+    if(ti === -1) return false;
+    ti += 1;
+  }
+  return true;
+}
 function certSearchResults(query, excludeNames){
   const q = normalizeCertQuery(query);
   if(!q) return [];
   const exclude = new Set(excludeNames || []);
-  return CERTIFICATION_CATALOG
-    .filter(c => !exclude.has(c.name))
-    .filter(c => normalizeCertQuery(c.name).includes(q) || (c.aliases || []).some(a => normalizeCertQuery(a).includes(q)))
-    .slice(0, 8);
+  const scored = [];
+  CERTIFICATION_CATALOG.forEach(c => {
+    if(exclude.has(c.name)) return;
+    const names = [c.name, ...(c.aliases || [])].map(normalizeCertQuery);
+    const isSubstring = names.some(n => n.includes(q));
+    const isFuzzy = !isSubstring && names.some(n => certFuzzyIncludes(n, q));
+    if(isSubstring) scored.push({ c, rank: 0 });
+    else if(isFuzzy) scored.push({ c, rank: 1 });
+  });
+  scored.sort((a, b) => a.rank - b.rank);
+  return scored.slice(0, 8).map(s => s.c);
 }
 const SEGMENT_OPTIONS = [
   {v:'sports_club', l:'運動部出身'}, {v:'arts_music', l:'芸術・音楽系'},
