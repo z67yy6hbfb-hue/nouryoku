@@ -3026,6 +3026,32 @@ function renderShareCanvas(){
   ctx.fillText(new Date().toLocaleDateString('ja-JP') + (lang === 'en' ? ' appraised' : ' 鑑定'), w / 2, h - 40);
 }
 
+let currentDataTab = 'records';
+function renderDataTabs(){
+  const el = document.getElementById('dataTabs');
+  if(!el) return;
+  const tabs = [
+    { key:'records', label: lang === 'en' ? 'My Records' : '自分の記録' },
+    { key:'overall', label: lang === 'en' ? 'Overall Stats' : '参加者全体の統計' },
+  ];
+  el.innerHTML = tabs.map(tb => `<button class="rank-mode-tab${tb.key === currentDataTab ? ' active' : ''}" data-tab="${tb.key}">${tb.label}</button>`).join('');
+  el.querySelectorAll('.rank-mode-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentDataTab = btn.dataset.tab;
+      el.querySelectorAll('.rank-mode-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyDataTabVisibility();
+    });
+  });
+  applyDataTabVisibility();
+}
+function applyDataTabVisibility(){
+  const recordsEl = document.getElementById('dataPageRecords');
+  const overallEl = document.getElementById('dataPageOverall');
+  if(recordsEl) recordsEl.style.display = currentDataTab === 'records' ? 'block' : 'none';
+  if(overallEl) overallEl.style.display = currentDataTab === 'overall' ? 'block' : 'none';
+}
+
 async function loadDataStats(){
   const el = document.getElementById('dataContent');
   el.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
@@ -5421,6 +5447,7 @@ function showPage(pageName){
   if(pageName === 'compare') loadCompare();
   if(pageName === 'share') renderShareCanvas();
   if(pageName === 'data'){
+    renderDataTabs();
     loadDataStats();
     loadMyRecords();
     loadMySelfAssessment();
