@@ -581,7 +581,13 @@ function mpFieldHTML(fieldKey){
 function certChipsHTML(){
   const certs = myProfileAttrs.certifications || [];
   if(certs.length === 0) return '<div class="mp-cert-empty">まだ登録された資格はありません</div>';
-  return certs.map((name, idx) => `<span class="mp-chip mp-cert-chip" data-idx="${idx}">${escapeHTML(name)}<span class="mp-cert-remove" data-remove="${idx}">✕</span></span>`).join('');
+  return certs.map((name, idx) => `
+    <span class="mp-chip mp-cert-chip" data-idx="${idx}">
+      <button type="button" class="mp-cert-move" data-move="prev" data-idx="${idx}"${idx === 0 ? ' disabled' : ''}>◀</button>
+      <span class="mp-cert-chip-label">${escapeHTML(name)}</span>
+      <button type="button" class="mp-cert-move" data-move="next" data-idx="${idx}"${idx === certs.length - 1 ? ' disabled' : ''}>▶</button>
+      <span class="mp-cert-remove" data-remove="${idx}">✕</span>
+    </span>`).join('');
 }
 function renderCertChips(){
   const container = document.getElementById('certChipsContainer');
@@ -591,6 +597,17 @@ function renderCertChips(){
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       myProfileAttrs.certifications.splice(Number(btn.dataset.remove), 1);
+      renderCertChips();
+    });
+  });
+  container.querySelectorAll('[data-move]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.idx);
+      const swapIdx = idx + (btn.dataset.move === 'prev' ? -1 : 1);
+      const arr = myProfileAttrs.certifications;
+      if(swapIdx < 0 || swapIdx >= arr.length) return;
+      [arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]];
       renderCertChips();
     });
   });
@@ -696,7 +713,10 @@ function renderMyPageUI(){
         <div class="mp-chip-group" id="certChipsContainer">${certChipsHTML()}</div>
       </div>
       <div class="mp-field mp-cert-search-wrap">
-        <input type="text" id="certSearchInput" class="mp-cert-search-input" placeholder="資格名で検索(例: 基本情報技術者、TOEIC)" autocomplete="off">
+        <div class="mp-cert-search-row">
+          <input type="text" id="certSearchInput" class="mp-cert-search-input" placeholder="資格名で検索(例: 基本情報技術者、TOEIC)" autocomplete="off">
+          <button type="button" class="mp-cert-add-btn" id="certAddBtn">登録</button>
+        </div>
         <div class="mp-cert-suggestions" id="certSuggestions"></div>
       </div>
     </div>
@@ -756,13 +776,15 @@ function renderMyPageUI(){
   renderCertChips();
   const certSearchInput = document.getElementById('certSearchInput');
   const certSuggestions = document.getElementById('certSuggestions');
+  const certAddBtn = document.getElementById('certAddBtn');
   if(certSearchInput && certSuggestions){
     certSearchInput.addEventListener('input', () => renderCertSuggestions(certSearchInput, certSuggestions));
     certSearchInput.addEventListener('focus', () => renderCertSuggestions(certSearchInput, certSuggestions));
     certSearchInput.addEventListener('blur', () => { certSuggestions.style.display = 'none'; });
-    certSearchInput.addEventListener('keydown', (e) => {
-      if(e.key !== 'Enter') return;
-      e.preventDefault();
+  }
+  if(certAddBtn && certSearchInput && certSuggestions){
+    certAddBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    certAddBtn.addEventListener('click', () => {
       const trimmed = certSearchInput.value.trim();
       if(!trimmed) return;
       const results = certSearchResults(certSearchInput.value, myProfileAttrs.certifications);
