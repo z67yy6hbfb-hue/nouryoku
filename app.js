@@ -261,14 +261,6 @@ const PROFILE_FIELDS = {
     {v:'creative', l:'クリエイティブ'}, {v:'public_service', l:'公務員'}, {v:'management', l:'経営・管理'}, {v:'student', l:'学生'}, {v:'other_job', l:'その他'},
   ]},
 };
-// マイページの各カードをフレンドに公開するかどうかの単位(profileVisibilityのキー)
-const PROFILE_VISIBILITY_SECTIONS = [
-  { key:'basic', icon:'🪪', label:'基本情報' },
-  { key:'education', icon:'🎓', label:'学歴・職種' },
-  { key:'mbti', icon:'🧭', label:'性格タイプ（MBTI）' },
-  { key:'activity', icon:'🏷️', label:'活動タグ' },
-  { key:'certifications', icon:'🎓', label:'資格・検定' },
-];
 const MBTI_AXES = [
   { key:'EI', label:'外向(E) / 内向(I)', options:[{v:'E',l:'外向 E'},{v:'I',l:'内向 I'}] },
   { key:'SN', label:'感覚(S) / 直観(N)', options:[{v:'S',l:'感覚 S'},{v:'N',l:'直観 N'}] },
@@ -549,6 +541,24 @@ let myProfileAttrs = null;
 
 function profilePublicRef(uid){ return firebaseDb.collection('users').doc(uid).collection('public').doc('profile'); }
 
+const DEFAULT_PROFILE_VISIBILITY = {
+  ageGroup: true, gender: true, birthOrder: true,
+  educationCategory: true, careerField: true,
+  mbti: true, activity: true, certifications: true,
+};
+// 旧バージョン(基本情報/学歴・職種をカード単位でまとめて公開設定していた頃)の
+// データを、項目単位の新しいキーに変換する。新形式のキーがあれば何もしない。
+function migrateProfileVisibility(vis){
+  if(!vis) return null;
+  const hasOld = ('basic' in vis) || ('education' in vis);
+  const hasNew = ('ageGroup' in vis) || ('educationCategory' in vis);
+  if(!hasOld || hasNew) return vis;
+  return {
+    ageGroup: vis.basic !== false, gender: vis.basic !== false, birthOrder: vis.basic !== false,
+    educationCategory: vis.education !== false, careerField: vis.education !== false,
+    mbti: vis.mbti !== false, activity: vis.activity !== false, certifications: vis.certifications !== false,
+  };
+}
 async function loadMyProfileAttributes(){
   if(!firebaseDb || !firebaseUser) return;
   const snap = await profilePublicRef(firebaseUser.uid).get();
@@ -556,12 +566,12 @@ async function loadMyProfileAttributes(){
   myProfileAttrs = Object.assign({
     nickname: '', ageGroup: null, gender: null, mbti: { EI:null, SN:null, TF:null, JP:null },
     birthOrder: null, educationCategory: null, careerField: null, activityCategories: [], certifications: [],
-    profileVisibility: { basic: true, education: true, mbti: true, activity: true, certifications: true },
+    profileVisibility: DEFAULT_PROFILE_VISIBILITY,
   }, data);
   if(!myProfileAttrs.mbti) myProfileAttrs.mbti = { EI:null, SN:null, TF:null, JP:null };
   if(!myProfileAttrs.activityCategories) myProfileAttrs.activityCategories = [];
   if(!myProfileAttrs.certifications) myProfileAttrs.certifications = [];
-  if(!myProfileAttrs.profileVisibility) myProfileAttrs.profileVisibility = { basic: true, education: true, mbti: true, activity: true, certifications: true };
+  myProfileAttrs.profileVisibility = Object.assign({}, DEFAULT_PROFILE_VISIBILITY, migrateProfileVisibility(myProfileAttrs.profileVisibility));
 }
 
 async function saveMyProfileAttributes(){
@@ -584,7 +594,7 @@ function visToggleHTML(sectionKey){
 function mpFieldHTML(fieldKey){
   const field = PROFILE_FIELDS[fieldKey];
   return `<div class="mp-field">
-    <span class="mp-field-label">${field.label}</span>
+    <div class="mp-field-label-row"><span class="mp-field-label">${field.label}</span>${visToggleHTML(fieldKey)}</div>
     <div class="mp-chip-group" data-field="${fieldKey}">${chipButtonsHTML(field.options, myProfileAttrs[fieldKey])}</div>
   </div>`;
 }
@@ -684,14 +694,14 @@ function renderMyPageUI(){
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報${visToggleHTML('basic')}</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
       ${mpFieldHTML('ageGroup')}
       ${mpFieldHTML('gender')}
       ${mpFieldHTML('birthOrder')}
     </div>
 
     <div class="mp-card">
-      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種${visToggleHTML('education')}</div>
+      <div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
       ${mpFieldHTML('educationCategory')}
       ${mpFieldHTML('careerField')}
     </div>
@@ -4999,31 +5009,27 @@ function profileOptionLabel(fieldKey, value){
 }
 function buildProfileViewHTML(profile){
   profile = profile || {};
-  const vis = profile.profileVisibility || {};
+  const vis = Object.assign({}, DEFAULT_PROFILE_VISIBILITY, migrateProfileVisibility(profile.profileVisibility));
   const isVisible = key => vis[key] !== false;
   const name = (profile.nickname || '').trim() || (lang === 'en' ? '(no name)' : '(名前未設定)');
   let sectionsHTML = '';
 
-  if(isVisible('basic')){
-    const values = [
-      profileOptionLabel('ageGroup', profile.ageGroup),
-      profileOptionLabel('gender', profile.gender),
-      profileOptionLabel('birthOrder', profile.birthOrder),
-    ].filter(Boolean);
-    if(values.length){
-      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
-        <div class="pv-row">${values.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
-    }
+  const basicValues = [
+    isVisible('ageGroup') ? profileOptionLabel('ageGroup', profile.ageGroup) : null,
+    isVisible('gender') ? profileOptionLabel('gender', profile.gender) : null,
+    isVisible('birthOrder') ? profileOptionLabel('birthOrder', profile.birthOrder) : null,
+  ].filter(Boolean);
+  if(basicValues.length){
+    sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🪪</span>基本情報</div>
+      <div class="pv-row">${basicValues.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
   }
-  if(isVisible('education')){
-    const values = [
-      profileOptionLabel('educationCategory', profile.educationCategory),
-      profileOptionLabel('careerField', profile.careerField),
-    ].filter(Boolean);
-    if(values.length){
-      sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
-        <div class="pv-row">${values.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
-    }
+  const eduValues = [
+    isVisible('educationCategory') ? profileOptionLabel('educationCategory', profile.educationCategory) : null,
+    isVisible('careerField') ? profileOptionLabel('careerField', profile.careerField) : null,
+  ].filter(Boolean);
+  if(eduValues.length){
+    sectionsHTML += `<div class="mp-card"><div class="mp-card-title"><span class="mp-card-icon">🎓</span>学歴・職種</div>
+      <div class="pv-row">${eduValues.map(v => `<span class="mp-chip active">${escapeHTML(v)}</span>`).join('')}</div></div>`;
   }
   if(isVisible('mbti')){
     const code = currentMbtiCode(profile.mbti);
