@@ -23,6 +23,17 @@ if (typeof window.storage === 'undefined') {
   };
 }
 
+/* --- ランキングスコア -----------------------------------------------------
+   以前は合計ポイントを円換算(×10000)した「鑑定額」をランキングの点数に
+   していたが、合計点数に固定倍率2.3をかけた「点」をランキングスコアとする。 */
+const RANKING_SCORE_MULTIPLIER = 2.3;
+function rankingScore(total){
+  return Math.round((total || 0) * RANKING_SCORE_MULTIPLIER * 10) / 10;
+}
+function fmtScore(score){
+  return (score || 0).toLocaleString('ja-JP', { maximumFractionDigits: 1 }) + (lang === 'en' ? ' pt' : '点');
+}
+
 /* --- Firebase ログイン連携 ---------------------------------------------
    Google アカウントでログインすると、個人データ(kantei-state)を
    Firestore (users/{uid}) に保存する。別の端末・ブラウザでも同じ
@@ -148,7 +159,7 @@ const UI_TEXT = {
   importToLocalBtn: { ja:'ローカルに取り込む', en:'Import to Local' },
   importedBtn: { ja:'取り込みました', en:'Imported' },
   participantLabel: { ja:'同時鑑定人数', en:'People' },
-  valuationLabel: { ja:'総合鑑定額', en:'Total Appraisal Value' },
+  valuationLabel: { ja:'総合点', en:'Total Score' },
   pendingRaw: { ja:'項目を入力すると自動で鑑定されます', en:'Fill in items and the result appears automatically' },
   scoreRaw: { ja:'総スコア', en:'Total score' },
   save: { ja:'保存する', en:'Save' },
@@ -163,7 +174,7 @@ const UI_TEXT = {
   footerNote: { ja:'以上、入力項目に基づき社会的価値係数を乗じて算出した結果を<br>ここに鑑定するものである。', en:'The above result, calculated by multiplying the entered values by<br>the social value coefficients, is hereby appraised.' },
   toRanking: { ja:'🏆 みんなの鑑定ランキングを見る →', en:'🏆 View everyone\'s ranking →' },
   rankTitle: { ja:'鑑定ランキング', en:'Appraisal Ranking' },
-  rankSubtitle: { ja:'これまで鑑定された人々の総合鑑定額ランキング', en:'Ranking of everyone appraised so far, by total value' },
+  rankSubtitle: { ja:'これまで鑑定された人々の総合点ランキング', en:'Ranking of everyone appraised so far, by total score' },
   rankNote: { ja:'※このランキングはこのアプリを使った全員に共有表示されます', en:'*This ranking is shared with everyone using this app' },
   rankNoteLocal: { ja:'※このアプリ版ではこの端末で鑑定した記録のみが表示されます', en:'*In this app version only records appraised on this device are shown' },
   backToCert: { ja:'← 鑑定書に戻る', en:'← Back to appraisal' },
@@ -1371,7 +1382,7 @@ function renderFriendRanking(){
       rows.push({ label: name, total: a.total });
     });
     rows.sort((a, b) => b.total - a.total);
-    el.innerHTML = rows.map((r, i) => `<div class="settings-row"><span>${i + 1}. ${escapeHTML(r.label)}</span><span>${Math.round(r.total * 10000).toLocaleString()}円</span></div>`).join('');
+    el.innerHTML = rows.map((r, i) => `<div class="settings-row"><span>${i + 1}. ${escapeHTML(r.label)}</span><span>${fmtScore(rankingScore(r.total))}</span></div>`).join('');
   }).catch(() => { el.innerHTML = '<div class="rank-empty">読み込みに失敗しました</div>'; });
 }
 
@@ -2721,25 +2732,25 @@ function revealValuation(finalTotal){
   const rawEl = document.getElementById('rawScore');
   amountEl.classList.remove('pending');
   amountEl.classList.add('rolling');
-  const finalYen = Math.round(finalTotal * 10000);
+  const finalScore = rankingScore(finalTotal);
   const duration = 1200;
   const start = performance.now();
   function tick(now){
     if(myToken !== revealToken) return;
     const progress = Math.min((now - start) / duration, 1);
     if(progress < 0.7){
-      const spread = Math.max(finalYen * 1.4, 50000);
-      const rnd = Math.round(Math.random() * spread);
-      amountEl.textContent = '¥' + rnd.toLocaleString('ja-JP');
+      const spread = Math.max(finalScore * 1.4, 5);
+      const rnd = Math.round(Math.random() * spread * 10) / 10;
+      amountEl.textContent = fmtScore(rnd);
       requestAnimationFrame(tick);
     } else if(progress < 1){
       const localT = (progress - 0.7) / 0.3;
       const eased = 1 - Math.pow(1 - localT, 3);
-      const val = Math.round(finalYen * eased);
-      amountEl.textContent = '¥' + val.toLocaleString('ja-JP');
+      const val = Math.round(finalScore * eased * 10) / 10;
+      amountEl.textContent = fmtScore(val);
       requestAnimationFrame(tick);
     } else {
-      amountEl.textContent = '¥' + finalYen.toLocaleString('ja-JP');
+      amountEl.textContent = fmtScore(finalScore);
       amountEl.classList.remove('rolling');
       rawEl.textContent = t('scoreRaw') + ' ' + finalTotal.toFixed(1) + ' ' + t('pt');
       confirmed = true;
@@ -2884,7 +2895,7 @@ async function saveState(){
       const payload = {
         name: p.name.trim(),
         total: total,
-        yen: Math.round(total * 10000),
+        yen: rankingScore(total),
         groupTotals: totals,
         date: new Date().toISOString(),
         mode: saveMode,
@@ -3210,10 +3221,10 @@ function renderShareCanvas(){
 
   ctx.font = '600 16px sans-serif';
   ctx.fillStyle = '#5b5544';
-  ctx.fillText(lang === 'en' ? 'Total Appraisal Value' : '総合鑑定額', w / 2, 250);
+  ctx.fillText(lang === 'en' ? 'Total Score' : '総合点', w / 2, 250);
   ctx.font = '800 56px serif';
   ctx.fillStyle = '#a53a35';
-  ctx.fillText('¥' + Math.round(currentTotal * 10000).toLocaleString('ja-JP'), w / 2, 320);
+  ctx.fillText(fmtScore(rankingScore(currentTotal)), w / 2, 320);
 
   const cx = w / 2, cy = 560, r = 150;
   const n = GROUPS.length;
@@ -3321,10 +3332,10 @@ async function loadDataStats(){
       <div class="stat-card" style="--sc:#8b5cf6;"><div class="stat-label">${lang === 'en' ? 'Variable mode' : '変動数'}</div><div class="stat-value">${variableEntries.length}</div></div>
     </div>`;
 
-    html += `<div class="stat-section-title">${lang === 'en' ? 'Average Appraisal Value' : '平均鑑定額'}</div>`;
+    html += `<div class="stat-section-title">${lang === 'en' ? 'Average Score' : '平均点'}</div>`;
     html += `<div class="stat-cards">
-      <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Default avg' : 'デフォルト平均'}</div><div class="stat-value">¥${Math.round(avgDefaultYen).toLocaleString('ja-JP')}</div></div>
-      <div class="stat-card" style="--sc:#e0932b;"><div class="stat-label">${lang === 'en' ? 'Coefficient avg' : '係数モード平均'}</div><div class="stat-value">¥${Math.round(avgCoefYen).toLocaleString('ja-JP')}</div></div>
+      <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Default avg' : 'デフォルト平均'}</div><div class="stat-value">${fmtScore(avgDefaultYen)}</div></div>
+      <div class="stat-card" style="--sc:#e0932b;"><div class="stat-label">${lang === 'en' ? 'Coefficient avg' : '係数モード平均'}</div><div class="stat-value">${fmtScore(avgCoefYen)}</div></div>
     </div>`;
 
     if(rankedEntries.length > 0){
@@ -3536,7 +3547,7 @@ async function importAssessmentToLocal(defaultName, a){
   const payload = {
     name,
     total: a.total || 0,
-    yen: Math.round((a.total || 0) * 10000),
+    yen: rankingScore(a.total),
     groupTotals: a.groupTotals || GROUPS.map(() => 0),
     date: new Date().toISOString(),
     mode: a.mode || 'default',
@@ -3606,7 +3617,7 @@ function localEntryRowOpts(entry, myName, kind){
   const isMine = !!myName && (entry.reviewerName || '').trim() === myName;
   let title;
   if(kind === 'self'){
-    title = `¥${(entry.yen || 0).toLocaleString('ja-JP')} ・ ${(entry.total || 0).toFixed(1)}pt`;
+    title = fmtScore(entry.yen || 0);
   } else if(kind === 'otherToMe'){
     title = escapeHTML(entry.reviewerName || t('anon'));
   } else if(kind === 'meToOther'){
@@ -3618,7 +3629,7 @@ function localEntryRowOpts(entry, myName, kind){
   }
   const meta = kind === 'self'
     ? `${fmtDate(entry.date)} ${t('appraisedSuffix')}`
-    : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}`;
+    : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(entry.yen || 0)}`;
   const toggles = isMine ? MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
       <label class="my-record-toggle">
         <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
@@ -3663,7 +3674,7 @@ async function loadMySelfAssessment(){
       if(snap.exists){
         const d = snap.data();
         const row = appendAssessmentRow(el, {
-          title: `¥${Math.round((d.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(d.total || 0).toFixed(1)}pt`,
+          title: fmtScore(rankingScore(d.total)),
           meta: (d.updatedAt && d.updatedAt.toDate) ? fmtDate(d.updatedAt.toDate()) + ' ' + t('appraisedSuffix') : '',
           groupTotals: d.groupTotals,
           levelMap: levelsFromAssessment(d),
@@ -3698,7 +3709,7 @@ function localOthersEntryRowOpts(entry, myName){
       </label>`).join('') : '';
   return {
     title: othersEntryTitle(entry.reviewerName, entry.name),
-    meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ¥${(entry.yen || 0).toLocaleString('ja-JP')}`,
+    meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(entry.yen || 0)}`,
     groupTotals: entry.groupTotals,
     levelMap: levelsFromAssessment(entry),
     editable: isMine,
@@ -3795,11 +3806,11 @@ async function loadOthersAssessments(){
         const reviewerDisplay = myName || reviewerName || t('anon');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
-          amountYen: Math.round((a.total || 0) * 10000),
+          amountYen: rankingScore(a.total),
           reviewer: reviewerDisplay, target: targetName,
           build: (container) => appendAssessmentRow(container, {
             title: othersEntryTitle(reviewerDisplay, targetName, linkedNote),
-            meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+            meta: fmtScore(rankingScore(a.total)),
             groupTotals: a.groupTotals,
             levelMap: levelsFromAssessment(a),
             editable: true,
@@ -3825,12 +3836,12 @@ async function loadOthersAssessments(){
         const name = profile.nickname || a.reviewerDisplayName || t('anon');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
-          amountYen: Math.round((a.total || 0) * 10000),
+          amountYen: rankingScore(a.total),
           reviewer: name, target: name,
           build: (container) => {
             const row = appendAssessmentRow(container, {
               title: othersEntryTitle(name, name),
-              meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+              meta: fmtScore(rankingScore(a.total)),
               groupTotals: a.groupTotals,
               levelMap: levelsFromAssessment(a),
               editable: false,
@@ -3852,12 +3863,12 @@ async function loadOthersAssessments(){
         const linkedNote = a.targetUid ? '' : (lang === 'en' ? ' (unlinked)' : '（未リンク）');
         rowBuilders.push({
           dateMs: a.updatedAt && a.updatedAt.toMillis ? a.updatedAt.toMillis() : 0,
-          amountYen: Math.round((a.total || 0) * 10000),
+          amountYen: rankingScore(a.total),
           reviewer: authorName, target: targetName,
           build: (container) => {
             const row = appendAssessmentRow(container, {
               title: othersEntryTitle(authorName, targetName, linkedNote),
-              meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+              meta: fmtScore(rankingScore(a.total)),
               groupTotals: a.groupTotals,
               levelMap: levelsFromAssessment(a),
               editable: false,
@@ -3920,7 +3931,7 @@ async function loadOthersAssessedMe(){
         const name = profile.nickname || a.reviewerDisplayName || t('anon');
         const row = appendAssessmentRow(el, {
           title: escapeHTML(name),
-          meta: `¥${Math.round((a.total || 0) * 10000).toLocaleString('ja-JP')} ・ ${(a.total || 0).toFixed(1)}pt`,
+          meta: fmtScore(rankingScore(a.total)),
           groupTotals: a.groupTotals,
           levelMap: levelsFromAssessment(a),
           editable: false,
@@ -5098,7 +5109,7 @@ function renderRankingList(mode){
     const badgeClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : 'rn';
     const tier = getRankTier(rank);
     const value = isTotal
-      ? `¥${(entry.yen || 0).toLocaleString('ja-JP')}`
+      ? fmtScore(entry.yen || 0)
       : `${((entry.groupTotals && entry.groupTotals[gi]) || 0).toFixed(1)} ${t('pt')}`;
     const ownerBadge = ownerMarkHTML(entry, 'name');
     const row = document.createElement('div');
@@ -5176,7 +5187,7 @@ function toggleEditPanel(row, entry){
       const updated = Object.assign({}, entry, {
         groupTotals: newTotals,
         total: newTotal,
-        yen: Math.round(newTotal * 10000),
+        yen: rankingScore(newTotal),
       });
       await storageRetry(() => window.storage.set(entry.key, JSON.stringify(updated), true));
       const idx = rankEntriesCache.findIndex(e => e.key === entry.key);
