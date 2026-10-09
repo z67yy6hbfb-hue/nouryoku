@@ -619,7 +619,8 @@ function chipButtonsHTML(options, selectedValue, extraClass){
 
 function visToggleHTML(sectionKey){
   const visible = (myProfileAttrs.profileVisibility || {})[sectionKey] !== false;
-  return `<button type="button" class="mp-vis-toggle${visible ? '' : ' is-private'}" data-visfield="${sectionKey}">${visible ? '🔓 公開' : '🔒 非公開'}</button>`;
+  const vTitle = visible ? 'タップするとフレンドに非公開にします' : 'タップするとフレンドに公開します';
+  return `<button type="button" class="mp-vis-toggle${visible ? '' : ' is-private'}" data-visfield="${sectionKey}" title="${escapeHTML(vTitle)}">${visible ? '🔓 公開' : '🔒 非公開'}</button>`;
 }
 function mpFieldHTML(fieldKey){
   const field = PROFILE_FIELDS[fieldKey];
@@ -634,10 +635,10 @@ function certChipsHTML(){
   if(certs.length === 0) return '<div class="mp-cert-empty">まだ登録された資格はありません</div>';
   return certs.map((name, idx) => `
     <span class="mp-chip mp-cert-chip" data-idx="${idx}">
-      <button type="button" class="mp-cert-move" data-move="prev" data-idx="${idx}"${idx === 0 ? ' disabled' : ''}>◀</button>
+      <button type="button" class="mp-cert-move" data-move="prev" data-idx="${idx}"${idx === 0 ? ' disabled' : ''} title="1つ前に並び替え">◀</button>
       <span class="mp-cert-chip-label">${escapeHTML(name)}</span>
-      <button type="button" class="mp-cert-move" data-move="next" data-idx="${idx}"${idx === certs.length - 1 ? ' disabled' : ''}>▶</button>
-      <span class="mp-cert-remove" data-remove="${idx}">✕</span>
+      <button type="button" class="mp-cert-move" data-move="next" data-idx="${idx}"${idx === certs.length - 1 ? ' disabled' : ''} title="1つ後ろに並び替え">▶</button>
+      <span class="mp-cert-remove" data-remove="${idx}" title="この資格を削除">✕</span>
     </span>`).join('');
 }
 function renderCertChips(){
@@ -766,14 +767,14 @@ function renderMyPageUI(){
       <div class="mp-field mp-cert-search-wrap">
         <div class="mp-cert-search-row">
           <input type="text" id="certSearchInput" class="mp-cert-search-input" placeholder="資格名で検索(例: 基本情報技術者、TOEIC)" autocomplete="off">
-          <button type="button" class="mp-cert-add-btn" id="certAddBtn">登録</button>
+          <button type="button" class="mp-cert-add-btn" id="certAddBtn" title="入力した資格名をリストに登録します">登録</button>
         </div>
         <div class="mp-cert-suggestions" id="certSuggestions"></div>
       </div>
     </div>
 
     <div class="mp-save-bar">
-      <button class="mp-save-btn" id="saveProfileAttrsBtn">プロフィールを保存</button>
+      <button class="mp-save-btn" id="saveProfileAttrsBtn" title="このページで編集した内容をすべて保存します">プロフィールを保存</button>
       <span id="profileAttrsSaveStatus" class="mp-save-status"></span>
     </div>
   `;
@@ -1201,7 +1202,7 @@ function renderFriendsPage(){
       <div class="settings-label" style="display:block; margin-bottom:8px;">フレンド申請</div>
       <div class="account-row">
         <input type="email" id="friendEmailInput" placeholder="フレンドのメールアドレス" style="flex:1; min-width:180px; padding:8px; border:1px solid var(--line); border-radius:8px;">
-        <button class="lang-btn" id="sendFriendRequestBtn">申請する</button>
+        <button class="lang-btn" id="sendFriendRequestBtn" title="入力したメールアドレスの相手にフレンド申請を送ります">申請する</button>
       </div>
       <div id="friendRequestStatus" style="font-size:11px; margin-top:4px;"></div>
     </div>
@@ -1282,8 +1283,8 @@ function renderIncomingRequests(){
   el.innerHTML = incoming.map(f => `
     <div class="account-row" data-pair="${f.pairId}">
       <span>${escapeHTML(f.requestedByEmail || '不明なユーザー')}</span>
-      <button class="lang-btn" data-action="accept">承認</button>
-      <button class="lang-btn backup-danger" data-action="reject">拒否</button>
+      <button class="lang-btn" data-action="accept" title="このフレンド申請を承認します">承認</button>
+      <button class="lang-btn backup-danger" data-action="reject" title="このフレンド申請を拒否します">拒否</button>
     </div>
   `).join('');
   el.querySelectorAll('[data-pair]').forEach(row => {
@@ -1316,10 +1317,10 @@ function renderFriendList(){
     return `
       <div class="settings-row" data-uid="${uid}">
         <span class="settings-label">${escapeHTML(name)}</span>
-        <button class="lang-btn" data-action="profile">プロフィール</button>
-        <button class="lang-btn${setting.includeInRanking ? ' active' : ''}" data-toggle="includeInRanking">ランキング反映</button>
-        <button class="lang-btn${setting.includeTheirReviewOfMe ? ' active' : ''}" data-toggle="includeTheirReviewOfMe">他己評価を算入</button>
-        <button class="lang-btn" data-action="link">過去データをリンク</button>
+        <button class="lang-btn" data-action="profile" title="このフレンドの公開プロフィールを見ます">プロフィール</button>
+        <button class="lang-btn${setting.includeInRanking ? ' active' : ''}" data-toggle="includeInRanking" title="このフレンドの自己鑑定を、フレンドの自己評価ランキングに含めるかを切り替えます">ランキング反映</button>
+        <button class="lang-btn${setting.includeTheirReviewOfMe ? ' active' : ''}" data-toggle="includeTheirReviewOfMe" title="このフレンドが自分を鑑定した結果を、自分宛ての他己評価の統計に算入するかを切り替えます">他己評価を算入</button>
+        <button class="lang-btn" data-action="link" title="フレンドと紐付く前に記録した過去の他己評価データを、このフレンドに関連付けます">過去データをリンク</button>
       </div>
       <div class="unlinked-picker" id="unlinkedPicker_${uid}" style="display:none; margin:4px 0 10px; font-size:12px;"></div>
     `;
@@ -1355,7 +1356,7 @@ async function toggleUnlinkedPicker(friendUid){
   try{
     const list = await listUnlinkedPeerAssessments(firebaseUser.uid);
     if(list.length === 0){ box.textContent = '未連携の他人鑑定データはありません'; return; }
-    box.innerHTML = list.map(a => `<button class="lang-btn" data-aid="${a.id}">${escapeHTML(a.targetNameRaw || '無名')} (${Math.round(a.total)}pt) をリンク</button>`).join(' ');
+    box.innerHTML = list.map(a => `<button class="lang-btn" data-aid="${a.id}" title="この未リンクの記録を、選んだフレンドに紐付けます">${escapeHTML(a.targetNameRaw || '無名')} (${Math.round(a.total)}pt) をリンク</button>`).join(' ');
     box.querySelectorAll('[data-aid]').forEach(btn => {
       btn.addEventListener('click', async () => {
         try{
@@ -1425,7 +1426,7 @@ function renderPeerReviewSection(containerId){
     </div>
     <div class="settings-row">
       <span class="settings-label">匿名表示</span>
-      <button class="lang-btn" id="${anonBtnId}">OFF</button>
+      <button class="lang-btn" id="${anonBtnId}" title="下の内訳の名前を「フレンドA」のように匿名表示に切り替えます">OFF</button>
     </div>
     <div id="${resultId}" style="margin-top:8px;"></div>
   `;
@@ -1938,7 +1939,7 @@ function buildDOM(){
       </div>
       <div class="group-mult-body" id="multBody-${gi}">
         <div class="group-mult-btns">
-          ${MULT_OPTIONS.map(m => `<button class="mult-btn${m===1?' active':''}" data-gi="${gi}" data-mult="${m}">×${m}</button>`).join('')}
+          ${MULT_OPTIONS.map(m => `<button class="mult-btn${m===1?' active':''}" data-gi="${gi}" data-mult="${m}" title="この分野の合計に×${m}の倍率をかけて試します(倍率が1以外だとランキングには保存されません)">×${m}</button>`).join('')}
         </div>
         <div class="group-mult-note">${t('multNote')}</div>
       </div>
@@ -2120,9 +2121,9 @@ function syncCoefArea(row){
   const isFree = originalAttr === '';
   if(variableCoefMode){
     area.innerHTML = `<div class="coef-stepper">
-      <button class="coef-minus" data-id="${id}">−</button>
+      <button class="coef-minus" data-id="${id}" title="この項目の係数を0.5下げます">−</button>
       <span class="coef-value">×${entry.coef.toFixed(1)}</span>
-      <button class="coef-plus" data-id="${id}">＋</button>
+      <button class="coef-plus" data-id="${id}" title="この項目の係数を0.5上げます">＋</button>
     </div>`;
   } else if(isFree){
     area.innerHTML = `<input type="number" class="coef-input" data-id="${id}" step="0.1" min="0" value="${entry.coef}">`;
@@ -3470,9 +3471,9 @@ function appendAssessmentRow(container, opts){
       <div class="my-record-date">${opts.meta || ''}</div>
     </div>
     <div class="my-record-actions">
-      <button class="my-record-edit-btn detail-toggle-btn">${t('detailBtn')}</button>
+      <button class="my-record-edit-btn detail-toggle-btn" title="${lang==='en'?'Show/hide item-level details':'項目別の詳細レベルを開閉します'}">${t('detailBtn')}</button>
       ${opts.extraControlsHTML || ''}
-      ${opts.editable ? `<button class="my-record-edit-btn edit-btn">${t('editBtn')}</button>` : ''}
+      ${opts.editable ? `<button class="my-record-edit-btn edit-btn" title="${lang==='en'?'Load this record into the editor to change it':'この記録を入力画面に読み込んで編集します'}">${t('editBtn')}</button>` : ''}
     </div>
     <div class="assessment-detail" style="display:none;"></div>
   `;
@@ -3529,6 +3530,7 @@ function appendImportButton(row, defaultName, data){
   const btn = document.createElement('button');
   btn.className = 'my-record-edit-btn';
   btn.textContent = t('importToLocalBtn');
+  btn.title = lang === 'en' ? 'Copy this record into your local ranking/compare/titles data' : 'この記録をこの端末のローカル(ランキング・比較・称号)に取り込みます';
   btn.addEventListener('click', async () => {
     const original = btn.textContent;
     const ok = await importAssessmentToLocal(defaultName, data);
@@ -3543,6 +3545,7 @@ function appendProfileButton(row, uid){
   const btn = document.createElement('button');
   btn.className = 'my-record-edit-btn';
   btn.textContent = lang === 'en' ? 'Profile' : 'プロフィール';
+  btn.title = lang === 'en' ? "View this person's public profile" : 'このフレンドの公開プロフィールを見ます';
   btn.addEventListener('click', () => showFriendProfile(uid));
   row.querySelector('.my-record-actions').appendChild(btn);
 }
@@ -3594,7 +3597,7 @@ function localEntryRowOpts(entry, myName, kind){
     ? `${fmtDate(entry.date)} ${t('appraisedSuffix')}`
     : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(entry.yen || 0)}`;
   const toggles = isMine ? MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
-      <label class="my-record-toggle">
+      <label class="my-record-toggle" title="${lang==='en' ? 'Toggle whether this record appears there' : 'オンにすると、この記録が該当ページに表示されます'}">
         <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
         <span>${label[lang]}</span>
       </label>`).join('') : '';
@@ -3666,7 +3669,7 @@ function othersEntryTitle(reviewerDisplay, targetDisplay, extraNote){
 function localOthersEntryRowOpts(entry, myName){
   const isMine = !!myName && (entry.reviewerName || '').trim() === myName;
   const toggles = isMine ? MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
-      <label class="my-record-toggle">
+      <label class="my-record-toggle" title="${lang==='en' ? 'Toggle whether this record appears there' : 'オンにすると、この記録が該当ページに表示されます'}">
         <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
         <span>${label[lang]}</span>
       </label>`).join('') : '';
@@ -3779,7 +3782,7 @@ async function loadOthersAssessments(){
             editable: true,
             onEdit: () => loadFirestoreEntriesIntoEditor(targetName, a.entries),
             extraControlsHTML: `
-              <label class="my-record-toggle">
+              <label class="my-record-toggle" title="${lang === 'en' ? 'Let the target person see this assessment you made of them' : 'オンにすると、この鑑定結果を対象者本人が見られるようになります'}">
                 <input type="checkbox" class="my-record-vis-toggle" ${visible ? 'checked' : ''}>
                 <span>${lang === 'en' ? 'Show to this person' : '相手に見せる'}</span>
               </label>`,
@@ -5250,7 +5253,7 @@ function toggleEditPanel(row, entry){
       <span>${escapeHTML(tName(g.name))}</span>
       <input type="number" step="0.1" class="edit-input" data-gi="${gi}" value="${(totals[gi] || 0).toFixed(1)}">
     </div>
-  `).join('') + `<button class="edit-save-btn" id="editSaveBtn-${entry.key.replace(/[^a-zA-Z0-9]/g,'')}">${lang==='en'?'Save changes':'変更を保存'}</button>`;
+  `).join('') + `<button class="edit-save-btn" id="editSaveBtn-${entry.key.replace(/[^a-zA-Z0-9]/g,'')}" title="${lang==='en'?'Save the edited values for this entry':'この記録の編集内容を保存します'}">${lang==='en'?'Save changes':'変更を保存'}</button>`;
   row.appendChild(panel);
   const saveBtn = panel.querySelector('.edit-save-btn');
   saveBtn.addEventListener('click', async (ev) => {

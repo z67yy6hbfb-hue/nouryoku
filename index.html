@@ -27,7 +27,7 @@
     <p id="lockMessage">アクセスが集中したため、安全のため一時的に停止しています。解除コードをお持ちの方は下から解除できます。</p>
     <div class="lock-unlock-row">
       <input type="password" id="unlockPin" placeholder="解除コード" inputmode="numeric">
-      <button id="unlockBtn">解除</button>
+      <button id="unlockBtn" title="入力した解除コードで一時停止を解除します">解除</button>
     </div>
     <div class="lock-status" id="unlockStatus"></div>
   </div>
@@ -43,7 +43,7 @@
 </div>
 <div class="profile-view-overlay" id="profileViewOverlay" style="display:none;">
   <div class="profile-view-box">
-    <button type="button" class="profile-view-close" id="profileViewCloseBtn">✕</button>
+    <button type="button" class="profile-view-close" id="profileViewCloseBtn" title="プロフィール表示を閉じる">✕</button>
     <div id="profileViewContent"></div>
   </div>
 </div>
@@ -95,8 +95,8 @@
     </div>
 
     <div class="save-row">
-      <button id="saveBtn">保存する</button>
-      <button id="resetBtn">リセット</button>
+      <button id="saveBtn" title="入力した鑑定結果をランキング・データ・称号に保存します">保存する</button>
+      <button id="resetBtn" title="入力中の項目をすべてリセットします">リセット</button>
     </div>
     <div class="save-status" id="saveStatus"></div>
 
@@ -104,31 +104,31 @@
       以上、入力項目に基づき社会的価値係数を乗じて算出した結果を<br>ここに鑑定するものである。
     </div>
 
-    <button class="next-page-btn" id="toRankingBtn" style="display:none;">🏆 みんなの鑑定ランキングを見る →</button>
+    <button class="next-page-btn" id="toRankingBtn" style="display:none;" title="みんなの鑑定ランキングページへ移動します">🏆 みんなの鑑定ランキングを見る →</button>
 
     <div class="settings-block">
-      <button class="settings-toggle" id="settingsToggle">⚙️ <span id="settingsToggleLabel">設定</span></button>
+      <button class="settings-toggle" id="settingsToggle" title="アカウント・言語・バックアップなどの詳細設定を開閉します">⚙️ <span id="settingsToggleLabel">設定</span></button>
       <div class="settings-panel" id="settingsPanel">
         <div class="account-row" id="accountRow">
           <span class="settings-label" id="accountLabelEl">アカウント</span>
           <div class="account-status" id="accountStatus">未ログイン</div>
-          <button class="lang-btn" id="googleLoginBtn">Googleでログイン</button>
-          <button class="lang-btn backup-danger" id="googleLogoutBtn" style="display:none;">ログアウト</button>
+          <button class="lang-btn" id="googleLoginBtn" title="Googleアカウントでログインし、データをクラウドに保存してフレンド機能等を使えるようにします">Googleでログイン</button>
+          <button class="lang-btn backup-danger" id="googleLogoutBtn" style="display:none;" title="ログアウトします(端末のローカルデータは残ります)">ログアウト</button>
         </div>
         <div class="settings-row">
           <span class="settings-label" id="languageLabelEl">言語</span>
           <div class="settings-lang-btns">
-            <button class="lang-btn active" data-lang="ja" id="langJaBtn">日本語</button>
-            <button class="lang-btn" data-lang="en" id="langEnBtn">English</button>
+            <button class="lang-btn active" data-lang="ja" id="langJaBtn" title="表示言語を日本語にします">日本語</button>
+            <button class="lang-btn" data-lang="en" id="langEnBtn" title="Switch display language to English">English</button>
           </div>
         </div>
         <div class="settings-row">
           <span class="settings-label" id="coefModeLabelEl">変動係数モード</span>
-          <button class="lang-btn" id="coefModeToggleBtn">OFF</button>
+          <button class="lang-btn" id="coefModeToggleBtn" title="項目ごとの係数を自由に変更して試せるモードです(この状態で保存した記録は平均統計から除外されます)">OFF</button>
         </div>
         <div class="settings-row">
           <span class="settings-label" id="addAllModeLabelEl">全項目加算モード</span>
-          <button class="lang-btn" id="addAllModeToggleBtn">OFF</button>
+          <button class="lang-btn" id="addAllModeToggleBtn" title="同じ項目内の複数のサブ項目を、最大値ではなくすべて合算して集計するように切り替えます">OFF</button>
         </div>
         <div class="settings-row">
           <span class="settings-label" id="statsLabelEl">閲覧統計</span>
@@ -137,9 +137,9 @@
         <div class="backup-row" id="backupRow">
           <span class="settings-label" id="backupLabelEl">データのバックアップ</span>
           <div class="backup-btns">
-            <button class="lang-btn" id="exportDataBtn">エクスポート</button>
-            <button class="lang-btn" id="importDataBtn">インポート</button>
-            <button class="lang-btn backup-danger" id="wipeDataBtn">この端末の保存を削除</button>
+            <button class="lang-btn" id="exportDataBtn" title="この端末の鑑定データをファイルとして書き出します">エクスポート</button>
+            <button class="lang-btn" id="importDataBtn" title="書き出しておいたファイルからデータを読み込みます">インポート</button>
+            <button class="lang-btn backup-danger" id="wipeDataBtn" title="この端末に保存されているデータを完全に削除します(元に戻せません)">この端末の保存を削除</button>
           </div>
           <input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
           <div class="backup-status" id="backupStatus"></div>
@@ -148,9 +148,9 @@
           <div class="threshold-row">
             <span id="thresholdLabelEl">自動停止の基準(1日あたり)</span>
             <input type="number" id="thresholdInput" min="5" step="5" value="50">
-            <button id="thresholdSaveBtn" style="font-size:11px;">保存</button>
+            <button id="thresholdSaveBtn" style="font-size:11px;" title="1日あたりのアクセス数の自動停止基準を保存します">保存</button>
           </div>
-          <button class="emergency-btn" id="emergencyLockBtn"><span class="stop-dot"></span><span id="emergencyLockText">今すぐ一時停止する</span></button>
+          <button class="emergency-btn" id="emergencyLockBtn" title="アクセスが集中した場合などに、手動でアプリを一時停止します"><span class="stop-dot"></span><span id="emergencyLockText">今すぐ一時停止する</span></button>
         </div>
       </div>
     </div>
@@ -174,9 +174,9 @@
 
     <div id="rankingList" class="ranking-list"></div>
 
-    <button class="next-page-btn" id="toTitlesBtn" style="display:none;">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
-    <button class="next-page-btn" id="goToSimulateBtn">🧪 重み付けランキングシミュレーション →</button>
-    <button class="next-page-btn" id="backBtn" style="display:none;">← 鑑定書に戻る</button>
+    <button class="next-page-btn" id="toTitlesBtn" style="display:none;" title="称号ページへ移動します">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
+    <button class="next-page-btn" id="goToSimulateBtn" title="分野・項目ごとに重みを変えて、ランキングの変化を試せるページへ移動します(実際のランキングには影響しません)">🧪 重み付けランキングシミュレーション →</button>
+    <button class="next-page-btn" id="backBtn" style="display:none;" title="鑑定書(入力画面)に戻ります">← 鑑定書に戻る</button>
   </div>
 </div>
 
@@ -192,14 +192,14 @@
     <div id="simWeightsEditor"></div>
 
     <div class="mp-save-bar">
-      <button class="mp-save-btn" id="simSaveWeightsBtn">重みを保存</button>
+      <button class="mp-save-btn" id="simSaveWeightsBtn" title="設定した重みをこの端末に保存します">重みを保存</button>
       <span id="simSaveStatus" class="mp-save-status"></span>
     </div>
 
     <div class="stat-section-title">この重みでのシミュレーション結果</div>
     <div id="simResultList" class="ranking-list"></div>
 
-    <button class="next-page-btn" id="backFromSimulateBtn">← ランキングに戻る</button>
+    <button class="next-page-btn" id="backFromSimulateBtn" title="ランキングページに戻ります">← ランキングに戻る</button>
   </div>
 </div>
 
@@ -222,7 +222,7 @@
 
     <div id="titlesList" class="ranking-list"></div>
 
-    <button class="next-page-btn" id="backFromTitlesBtn" style="display:none;">← ランキングに戻る</button>
+    <button class="next-page-btn" id="backFromTitlesBtn" style="display:none;" title="ランキングページに戻ります">← ランキングに戻る</button>
   </div>
 </div>
 
@@ -255,7 +255,7 @@
 
     <canvas id="shareCanvas" width="800" height="1000" style="width:100%; max-width:400px; display:block; margin:0 auto 16px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.2);"></canvas>
 
-    <button class="next-page-btn" id="shareImageBtn">📤 <span id="shareBtnText">この画像を共有 / 保存</span></button>
+    <button class="next-page-btn" id="shareImageBtn" title="この鑑定結果の画像を共有したり端末に保存したりします">📤 <span id="shareBtnText">この画像を共有 / 保存</span></button>
     <div class="rank-note" id="shareNoteEl" style="margin-top:10px;">※お使いの環境によっては「長押しで画像を保存」→LINEに添付、という手順になります</div>
   </div>
 </div>
@@ -321,28 +321,28 @@
 </div>
 
 <nav class="bottom-nav" id="bottomNav">
-  <button class="bottom-nav-btn" data-page="cert" id="navHomeBtn">
+  <button class="bottom-nav-btn" data-page="cert" id="navHomeBtn" title="鑑定の入力画面に移動します">
     <span class="bn-icon">🏠</span><span class="bn-label" id="navHomeLabel">ホーム</span>
   </button>
-  <button class="bottom-nav-btn" data-page="rank" id="navRankBtn">
+  <button class="bottom-nav-btn" data-page="rank" id="navRankBtn" title="みんなの鑑定ランキングを見ます">
     <span class="bn-icon">🏆</span><span class="bn-label" id="navRankLabel">ランキング</span>
   </button>
-  <button class="bottom-nav-btn" data-page="compare" id="navCompareBtn">
+  <button class="bottom-nav-btn" data-page="compare" id="navCompareBtn" title="自分や他の人同士の鑑定結果を比較します">
     <span class="bn-icon">⚔️</span><span class="bn-label" id="navCompareLabel">比較</span>
   </button>
-  <button class="bottom-nav-btn" data-page="titles" id="navTitlesBtn">
+  <button class="bottom-nav-btn" data-page="titles" id="navTitlesBtn" title="獲得した称号の一覧を見ます">
     <span class="bn-icon">🎖️</span><span class="bn-label" id="navTitlesLabel">称号</span>
   </button>
-  <button class="bottom-nav-btn" data-page="share" id="navShareBtn">
+  <button class="bottom-nav-btn" data-page="share" id="navShareBtn" title="鑑定結果を画像にして共有します">
     <span class="bn-icon">📤</span><span class="bn-label" id="navShareLabel">共有</span>
   </button>
-  <button class="bottom-nav-btn" data-page="data" id="navDataBtn">
+  <button class="bottom-nav-btn" data-page="data" id="navDataBtn" title="自分・他者の記録や全体統計を見ます">
     <span class="bn-icon">📊</span><span class="bn-label" id="navDataLabel">データ</span>
   </button>
-  <button class="bottom-nav-btn" data-page="mypage" id="navMypageBtn">
+  <button class="bottom-nav-btn" data-page="mypage" id="navMypageBtn" title="自分のプロフィールを編集します">
     <span class="bn-icon">🪪</span><span class="bn-label" id="navMypageLabel">マイページ</span>
   </button>
-  <button class="bottom-nav-btn" data-page="friends" id="navFriendsBtn">
+  <button class="bottom-nav-btn" data-page="friends" id="navFriendsBtn" title="フレンドの申請・管理をします">
     <span class="bn-icon">👥</span><span class="bn-label" id="navFriendsLabel">フレンド</span>
   </button>
 </nav>
