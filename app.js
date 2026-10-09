@@ -218,7 +218,6 @@ const UI_TEXT = {
   settingsTitle: { ja:'設定', en:'Settings' },
   languageLabel: { ja:'言語', en:'Language' },
   coefModeLabel: { ja:'変動係数モード', en:'Variable coefficient mode' },
-  coefFixedLabel: { ja:'係数モード', en:'Coefficient mode' },
   addAllModeLabel: { ja:'全項目加算モード', en:'Sum-all-items mode' },
   coefLabel2: { ja:'係数', en:'Coef' },
   statsLabel: { ja:'閲覧統計', en:'View stats' },
@@ -2125,14 +2124,10 @@ function syncCoefArea(row){
       <span class="coef-value">×${entry.coef.toFixed(1)}</span>
       <button class="coef-plus" data-id="${id}">＋</button>
     </div>`;
-  } else if(coefMode){
-    if(isFree){
-      area.innerHTML = `<input type="number" class="coef-input" data-id="${id}" step="0.1" min="0" value="${entry.coef}">`;
-    } else {
-      area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×${parseFloat(originalAttr).toFixed(1)}</span>`;
-    }
+  } else if(isFree){
+    area.innerHTML = `<input type="number" class="coef-input" data-id="${id}" step="0.1" min="0" value="${entry.coef}">`;
   } else {
-    area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×1.0</span>`;
+    area.innerHTML = `<span class="coef-fixed">${t('coefLabel')} ×${parseFloat(originalAttr).toFixed(1)}</span>`;
   }
 }
 
@@ -2147,30 +2142,13 @@ function applyCoefModeToEntries(){
       const area = row ? row.querySelector('.coef-area') : null;
       const isFree = area ? area.dataset.original === '' : false;
       const originalVal = (area && !isFree) ? parseFloat(area.dataset.original) : 1.0;
-      if(variableCoefMode){
-        p.entries[id].coef = 3.0;
-      } else if(coefMode){
-        p.entries[id].coef = isFree ? 1.0 : originalVal;
-      } else {
-        p.entries[id].coef = 1.0;
-      }
+      p.entries[id].coef = variableCoefMode ? 3.0 : originalVal;
     });
   });
 }
 
-function setCoefMode(on){
-  coefMode = on;
-  if(on) variableCoefMode = false;
-  applyCoefModeToEntries();
-  syncAllCoefAreas();
-  confirmed = false;
-  recalc();
-  updateCoefToggleUI();
-}
-
 function setVariableCoefMode(on){
   variableCoefMode = on;
-  if(on) coefMode = false;
   applyCoefModeToEntries();
   syncAllCoefAreas();
   confirmed = false;
@@ -2194,11 +2172,6 @@ function updateCoefToggleUI(){
   if(varBtn){
     varBtn.textContent = variableCoefMode ? 'ON' : 'OFF';
     varBtn.classList.toggle('active', variableCoefMode);
-  }
-  const fixedBtn = document.getElementById('coefFixedToggleBtn');
-  if(fixedBtn){
-    fixedBtn.textContent = coefMode ? 'ON' : 'OFF';
-    fixedBtn.classList.toggle('active', coefMode);
   }
 }
 
@@ -2870,7 +2843,6 @@ async function saveState(){
       activeProfile: activeProfile,
       participantCount: participantCount,
       variableCoefMode: variableCoefMode,
-      coefMode: coefMode,
       addAllMode: addAllMode,
       reviewerName: reviewerName,
       reviewerOwnerMarkOff: reviewerOwnerMarkOff
@@ -2884,7 +2856,7 @@ async function saveState(){
   let savedCount = 0;
   let skippedForMult = 0;
   let rankErr = '';
-  const saveMode = variableCoefMode ? 'variable' : (coefMode ? 'coefficient' : 'default');
+  const saveMode = variableCoefMode ? 'variable' : 'default';
   for(let i = 0; i < participantCount; i++){
     const p = profiles[i];
     if(!p.name || !p.name.trim()) continue;
@@ -2989,9 +2961,6 @@ async function loadState(){
         if(typeof loaded.variableCoefMode === 'boolean'){
           variableCoefMode = loaded.variableCoefMode;
         }
-        if(typeof loaded.coefMode === 'boolean'){
-          coefMode = loaded.coefMode;
-        }
         if(typeof loaded.addAllMode === 'boolean'){
           addAllMode = loaded.addAllMode;
           const addAllBtn = document.getElementById('addAllModeToggleBtn');
@@ -3055,7 +3024,6 @@ function renderRankModeTabs(){
   if(!el) return;
   const modes = [
     { key:'default', label: lang === 'en' ? 'Default' : 'デフォルト' },
-    { key:'coefficient', label: lang === 'en' ? 'Coefficient' : '係数モード' },
     { key:'variable', label: lang === 'en' ? 'Variable' : '変動数' },
   ];
   el.innerHTML = modes.map(m => `<button class="rank-mode-tab${m.key===currentRankMainMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
@@ -3315,31 +3283,26 @@ async function loadDataStats(){
       return;
     }
     const defaultEntries = entries.filter(e => (e.mode || 'default') === 'default');
-    const coefEntries = entries.filter(e => e.mode === 'coefficient');
     const variableEntries = entries.filter(e => e.mode === 'variable');
-    const rankedEntries = defaultEntries.concat(coefEntries);
 
     function avg(arr, fn){ if(arr.length === 0) return 0; return arr.reduce((a, e) => a + fn(e), 0) / arr.length; }
     const avgDefaultYen = avg(defaultEntries, e => e.yen || 0);
-    const avgCoefYen = avg(coefEntries, e => e.yen || 0);
 
     let html = '';
     html += `<div class="stat-section-title">${lang === 'en' ? 'Overview' : '概要'}</div>`;
     html += `<div class="stat-cards">
       <div class="stat-card" style="--sc:#2f7dd1;"><div class="stat-label">${lang === 'en' ? 'Total participants' : '総登録数'}</div><div class="stat-value">${entries.length}</div></div>
       <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Default mode' : 'デフォルト'}</div><div class="stat-value">${defaultEntries.length}</div></div>
-      <div class="stat-card" style="--sc:#e0932b;"><div class="stat-label">${lang === 'en' ? 'Coefficient mode' : '係数モード'}</div><div class="stat-value">${coefEntries.length}</div></div>
       <div class="stat-card" style="--sc:#8b5cf6;"><div class="stat-label">${lang === 'en' ? 'Variable mode' : '変動数'}</div><div class="stat-value">${variableEntries.length}</div></div>
     </div>`;
 
     html += `<div class="stat-section-title">${lang === 'en' ? 'Average Score' : '平均点'}</div>`;
     html += `<div class="stat-cards">
       <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Default avg' : 'デフォルト平均'}</div><div class="stat-value">${fmtScore(avgDefaultYen)}</div></div>
-      <div class="stat-card" style="--sc:#e0932b;"><div class="stat-label">${lang === 'en' ? 'Coefficient avg' : '係数モード平均'}</div><div class="stat-value">${fmtScore(avgCoefYen)}</div></div>
     </div>`;
 
-    if(rankedEntries.length > 0){
-      const catAverages = GROUPS.map((g, gi) => avg(rankedEntries, e => (e.groupTotals && e.groupTotals[gi]) || 0));
+    if(defaultEntries.length > 0){
+      const catAverages = GROUPS.map((g, gi) => avg(defaultEntries, e => (e.groupTotals && e.groupTotals[gi]) || 0));
       const maxCat = Math.max(...catAverages, 1);
       html += `<div class="stat-section-title">${lang === 'en' ? 'Average Score by Category' : 'カテゴリ別平均スコア'}</div>`;
       GROUPS.forEach((g, gi) => {
@@ -3417,7 +3380,7 @@ async function fetchLeaderboardEntries(){
       try{
         const parsed = JSON.parse(res.value.value);
         parsed.key = keys[i];
-        if(!parsed.mode) parsed.mode = 'default';
+        if(!parsed.mode || parsed.mode === 'coefficient') parsed.mode = 'default'; // 係数モード廃止に伴い旧データを統合
         entries.push(parsed);
       }catch(e){ /* skip malformed entry */ }
     }
@@ -5531,7 +5494,6 @@ function applyStaticTranslations(){
   updateAccountUI();
   document.getElementById('languageLabelEl').textContent = t('languageLabel');
   document.getElementById('coefModeLabelEl').textContent = t('coefModeLabel');
-  document.getElementById('coefFixedLabelEl').textContent = t('coefFixedLabel');
   document.getElementById('addAllModeLabelEl').textContent = t('addAllModeLabel');
   document.getElementById('statsLabelEl').textContent = t('statsLabel');
   document.getElementById('thresholdLabelEl').textContent = t('thresholdLabel');
@@ -5625,7 +5587,6 @@ function initSettingsUI(){
   document.getElementById('langJaBtn').addEventListener('click', () => setLanguage('ja'));
   document.getElementById('langEnBtn').addEventListener('click', () => setLanguage('en'));
   document.getElementById('coefModeToggleBtn').addEventListener('click', () => setVariableCoefMode(!variableCoefMode));
-  document.getElementById('coefFixedToggleBtn').addEventListener('click', () => setCoefMode(!coefMode));
   document.getElementById('addAllModeToggleBtn').addEventListener('click', () => setAddAllMode(!addAllMode));
   document.getElementById('emergencyLockBtn').addEventListener('click', async () => {
     await setLock(true, lang === 'en' ? 'Manually paused' : '手動で一時停止');
@@ -5928,7 +5889,6 @@ let profiles = [makeEmptyProfile(), makeEmptyProfile(), makeEmptyProfile(), make
 let activeProfile = 0;
 let participantCount = 1;
 let variableCoefMode = false;
-let coefMode = true;
 let addAllMode = false;
 state = profiles[0];
 safeRun(applyCoefModeToEntries, 'applyCoefModeToEntries');
