@@ -175,7 +175,31 @@
     <div id="rankingList" class="ranking-list"></div>
 
     <button class="next-page-btn" id="toTitlesBtn" style="display:none;">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
+    <button class="next-page-btn" id="goToSimulateBtn">🧪 重み付けランキングシミュレーション →</button>
     <button class="next-page-btn" id="backBtn" style="display:none;">← 鑑定書に戻る</button>
+  </div>
+</div>
+
+<div class="doc" id="pageSimulate" style="display:none;">
+  <div class="frame">
+    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+    <div class="eyebrow-doc">Simulation</div>
+    <h1>重み付けランキングシミュレーション</h1>
+    <div class="title-divider"></div>
+    <div class="subtitle">分野・項目ごとに重みを変えると、ランキングがどう変わるかを試せます(実際のランキングには影響しません)</div>
+
+    <div id="simWeightsEditor"></div>
+
+    <div class="mp-save-bar">
+      <button class="mp-save-btn" id="simSaveWeightsBtn">重みを保存</button>
+      <span id="simSaveStatus" class="mp-save-status"></span>
+    </div>
+
+    <div class="stat-section-title">この重みでのシミュレーション結果</div>
+    <div id="simResultList" class="ranking-list"></div>
+
+    <button class="next-page-btn" id="backFromSimulateBtn">← ランキングに戻る</button>
   </div>
 </div>
 

@@ -427,6 +427,32 @@
   .next-page-btn:hover{transform:translateY(-1px); box-shadow:0 5px 14px rgba(0,0,0,0.22);}
   .next-page-btn:active{transform:translateY(0);}
 
+  .sim-group-block{
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; margin-bottom:10px;
+  }
+  .sim-group-header{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .sim-group-name{font-family:'Zen Maru Gothic', sans-serif; font-weight:700; font-size:13px; color:var(--ink);}
+  .sim-group-input{
+    width:72px; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px;
+    font-size:13px; text-align:center; font-family:'Zen Kaku Gothic New', sans-serif; color:var(--ink);
+  }
+  .sim-group-input:focus{outline:none; border-color:var(--red);}
+  .sim-leaf-details{margin-top:8px;}
+  .sim-leaf-details summary{font-size:11px; color:var(--ink-soft); cursor:pointer; user-select:none;}
+  .sim-leaf-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:6px 0; border-bottom:1px dashed var(--line-soft);
+  }
+  .sim-leaf-row:last-child{border-bottom:none;}
+  .sim-leaf-name{font-size:12px; color:var(--ink-soft);}
+  .sim-leaf-input{
+    width:84px; padding:5px 7px; border:1px solid var(--line); border-radius:6px;
+    font-size:12px; text-align:center; font-family:'Zen Kaku Gothic New', sans-serif; color:var(--ink);
+  }
+  .sim-leaf-input:focus{outline:none; border-color:var(--red);}
+  .sim-leaf-input::placeholder{color:var(--ink-soft); font-size:10px;}
+
   .settings-block{margin-top:16px;}
   .settings-toggle{
     display:block; width:100%; padding:10px; background:transparent;

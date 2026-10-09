@@ -3957,6 +3957,122 @@ async function loadRanking(){
   }
 }
 
+/* --- 重み付けランキングシミュレーション ------------------------------------
+   実際のランキングには一切影響しない「what-if」ツール。分野(グループ)単位、
+   または項目(リーフ)単位で重みを設定し、全エントリのlevelSnapshotから
+   スコアを再計算して並べ替える。項目単位の重みが設定されていればそちらを
+   優先し、なければ分野単位の重みを使う(未設定なら×1)。 */
+let simWeights = { groups: {}, leaves: {} };
+async function loadSimWeights(){
+  if(typeof window.storage === 'undefined') return;
+  try{
+    const res = await window.storage.get('kantei-sim-weights');
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      simWeights = { groups: parsed.groups || {}, leaves: parsed.leaves || {} };
+    }
+  }catch(err){ console.warn('loadSimWeights failed:', err); }
+}
+async function saveSimWeights(){
+  if(typeof window.storage === 'undefined') return false;
+  try{
+    await window.storage.set('kantei-sim-weights', JSON.stringify(simWeights));
+    return true;
+  }catch(err){ console.warn('saveSimWeights failed:', err); return false; }
+}
+function simulateEntryTotal(entry, weights){
+  if(!entry.levelSnapshot) return entry.total || 0;
+  let total = 0;
+  ALL_LEAVES.forEach(leaf => {
+    const key = entry.levelSnapshot[leaf.id];
+    if(!key || key === 'none') return;
+    const levelVal = levelValueByKey(key) || 0;
+    if(NO_COEF_LEVELS.has(key)){
+      total += levelVal;
+      return;
+    }
+    const leafW = weights.leaves[leaf.id];
+    const groupW = weights.groups[leaf.gi];
+    const w = (leafW !== undefined && leafW !== null && leafW !== '')
+      ? Number(leafW)
+      : ((groupW !== undefined && groupW !== null && groupW !== '') ? Number(groupW) : 1);
+    total += levelVal * w;
+  });
+  return total;
+}
+function renderSimWeightsEditor(){
+  const el = document.getElementById('simWeightsEditor');
+  if(!el) return;
+  el.innerHTML = GROUPS.map((g, gi) => {
+    const groupVal = simWeights.groups[gi] !== undefined ? simWeights.groups[gi] : 1;
+    const leaves = groupLeafItemsDetailed(gi);
+    return `<div class="sim-group-block">
+      <div class="sim-group-header">
+        <span class="sim-group-name">${escapeHTML(tName(g.name))}</span>
+        <input type="number" class="sim-group-input" data-gi="${gi}" step="0.1" min="0" value="${groupVal}">
+      </div>
+      <details class="sim-leaf-details">
+        <summary>${lang === 'en' ? 'Per-item overrides' : '項目別の上書き(任意)'}</summary>
+        ${leaves.map(leaf => `
+          <div class="sim-leaf-row">
+            <span class="sim-leaf-name">${escapeHTML(tName(leaf.name))}</span>
+            <input type="number" class="sim-leaf-input" data-leaf="${leaf.id}" step="0.1" min="0" placeholder="${lang === 'en' ? '(inherit)' : '(分野に従う)'}" value="${simWeights.leaves[leaf.id] !== undefined ? simWeights.leaves[leaf.id] : ''}">
+          </div>`).join('')}
+      </details>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.sim-group-input').forEach(input => {
+    input.addEventListener('change', () => {
+      simWeights.groups[input.dataset.gi] = input.value === '' ? 1 : parseFloat(input.value);
+      recomputeSimulation();
+    });
+  });
+  el.querySelectorAll('.sim-leaf-input').forEach(input => {
+    input.addEventListener('change', () => {
+      if(input.value === ''){ delete simWeights.leaves[input.dataset.leaf]; }
+      else simWeights.leaves[input.dataset.leaf] = parseFloat(input.value);
+      recomputeSimulation();
+    });
+  });
+}
+function recomputeSimulation(){
+  const listEl = document.getElementById('simResultList');
+  if(!listEl) return;
+  const visible = (rankEntriesCache || []).filter(e => e.rankingVisible !== false && (e.mode || 'default') !== 'variable');
+  if(visible.length === 0){
+    listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
+    return;
+  }
+  const scored = visible.map(entry => ({ entry, simTotal: simulateEntryTotal(entry, simWeights) }));
+  scored.sort((a, b) => b.simTotal - a.simTotal);
+  listEl.innerHTML = scored.slice(0, RANKING_DISPLAY_LIMIT).map((s, i) => {
+    const rank = i + 1;
+    const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+    return `<div class="rank-row">
+      <div class="rank-badge rn">${medalEmoji || rank}</div>
+      <div class="rank-info"><div class="rank-name">${escapeHTML(s.entry.name || t('anon'))}</div></div>
+      <div class="rank-amount">${fmtScore(rankingScore(s.simTotal))}</div>
+    </div>`;
+  }).join('');
+}
+async function loadSimulatePage(){
+  await loadSimWeights();
+  renderSimWeightsEditor();
+  const listEl = document.getElementById('simResultList');
+  listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
+  try{
+    let entries = rankEntriesCache;
+    if(!entries || entries.length === 0){
+      entries = await fetchLeaderboardEntries();
+      rankEntriesCache = entries;
+    }
+    recomputeSimulation();
+  }catch(err){
+    console.warn('loadSimulatePage error:', err);
+    listEl.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
+  }
+}
+
 function renderRankTabs(){
   const tabsEl = document.getElementById('rankTabs');
   if(currentRankMainMode === 'variable'){
@@ -5797,7 +5913,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
+  const pages = { cert:'pageCert', rank:'pageRank', simulate:'pageSimulate', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -5807,6 +5923,7 @@ function showPage(pageName){
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if(pageName === 'rank') loadRanking();
+  if(pageName === 'simulate') loadSimulatePage();
   if(pageName === 'titles'){
     renderTitlesTabs();
     renderTitleLegend();
@@ -5830,6 +5947,15 @@ document.getElementById('toRankingBtn').addEventListener('click', () => showPage
 document.getElementById('backBtn').addEventListener('click', () => showPage('cert'));
 document.getElementById('toTitlesBtn').addEventListener('click', () => showPage('titles'));
 document.getElementById('backFromTitlesBtn').addEventListener('click', () => showPage('rank'));
+document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulate'));
+document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
+document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('simSaveStatus');
+  statusEl.textContent = lang === 'en' ? 'Saving…' : '保存中…';
+  const ok = await saveSimWeights();
+  statusEl.textContent = ok ? (lang === 'en' ? 'Saved' : '保存しました') : (lang === 'en' ? 'Save failed' : '保存に失敗しました');
+  setTimeout(() => { statusEl.textContent = ''; }, 2500);
+});
 document.getElementById('navHomeBtn').addEventListener('click', () => showPage('cert'));
 document.getElementById('navRankBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('navCompareBtn').addEventListener('click', () => showPage('compare'));
