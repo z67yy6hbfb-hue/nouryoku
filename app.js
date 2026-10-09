@@ -516,19 +516,37 @@ function certSearchResults(query, excludeNames){
   scored.sort((a, b) => a.rank - b.rank);
   return scored.slice(0, 8).map(s => s.c);
 }
-const SEGMENT_OPTIONS = [
-  {v:'sports_club', l:'運動部出身'}, {v:'arts_music', l:'芸術・音楽系'},
-  {v:'mbti_t', l:'MBTI思考型(T)'}, {v:'mbti_f', l:'MBTI感情型(F)'},
-  {v:'science_grad', l:'理系大卒'}, {v:'humanities_grad', l:'文系大卒'},
+// 属性による絞り込み: マイページの項目(年代/性別/生まれ順/学歴/職種/MBTI/活動タグ)を
+// 全て網羅した選択肢を、PROFILE_FIELDS等の定義から機械的に生成する。
+const MBTI_AXIS_SEGMENT_OPTIONS = [
+  {v:'mbtiAxis:E', l:'外向(E)'}, {v:'mbtiAxis:I', l:'内向(I)'},
+  {v:'mbtiAxis:S', l:'感覚(S)'}, {v:'mbtiAxis:N', l:'直観(N)'},
+  {v:'mbtiAxis:T', l:'思考(T)'}, {v:'mbtiAxis:F', l:'感情(F)'},
+  {v:'mbtiAxis:J', l:'判断(J)'}, {v:'mbtiAxis:P', l:'探索(P)'},
 ];
-const SEGMENT_PREDICATES = {
-  sports_club: attrs => (attrs.activityCategories || []).includes('sports_team'),
-  arts_music: attrs => (attrs.activityCategories || []).includes('arts_music'),
-  mbti_t: attrs => attrs.mbti && attrs.mbti.TF === 'T',
-  mbti_f: attrs => attrs.mbti && attrs.mbti.TF === 'F',
-  science_grad: attrs => attrs.educationCategory === 'science_grad',
-  humanities_grad: attrs => attrs.educationCategory === 'humanities_grad',
-};
+const SEGMENT_GROUPS = [
+  { key:'ageGroup', label:PROFILE_FIELDS.ageGroup.label, options: PROFILE_FIELDS.ageGroup.options.map(o => ({ v:'ageGroup:'+o.v, l:o.l })) },
+  { key:'gender', label:PROFILE_FIELDS.gender.label, options: PROFILE_FIELDS.gender.options.map(o => ({ v:'gender:'+o.v, l:o.l })) },
+  { key:'birthOrder', label:PROFILE_FIELDS.birthOrder.label, options: PROFILE_FIELDS.birthOrder.options.map(o => ({ v:'birthOrder:'+o.v, l:o.l })) },
+  { key:'educationCategory', label:PROFILE_FIELDS.educationCategory.label, options: PROFILE_FIELDS.educationCategory.options.map(o => ({ v:'educationCategory:'+o.v, l:o.l })) },
+  { key:'careerField', label:PROFILE_FIELDS.careerField.label, options: PROFILE_FIELDS.careerField.options.map(o => ({ v:'careerField:'+o.v, l:o.l })) },
+  { key:'mbti', label:'MBTI', options: MBTI_AXIS_SEGMENT_OPTIONS },
+  { key:'activity', label:'活動タグ', options: ACTIVITY_CATEGORY_OPTIONS.map(o => ({ v:'activity:'+o.v, l:o.l })) },
+];
+const SEGMENT_OPTIONS = SEGMENT_GROUPS.flatMap(g => g.options);
+function segmentMatches(attrs, segVal){
+  if(segVal.indexOf('mbtiAxis:') === 0){
+    const v = segVal.slice('mbtiAxis:'.length);
+    const mbti = attrs.mbti || {};
+    return mbti.EI === v || mbti.SN === v || mbti.TF === v || mbti.JP === v;
+  }
+  if(segVal.indexOf('activity:') === 0){
+    return (attrs.activityCategories || []).includes(segVal.slice('activity:'.length));
+  }
+  const idx = segVal.indexOf(':');
+  if(idx === -1) return true;
+  return attrs[segVal.slice(0, idx)] === segVal.slice(idx + 1);
+}
 function emailIndexId(email){ return (email || '').trim().toLowerCase().replace(/[^a-z0-9@._-]/g, ''); }
 
 async function ensureEmailIndex(user){
@@ -983,7 +1001,7 @@ async function linkLegacyAssessmentToFriend(assessmentId, friendUid, myUid){
 /* --- 集計・フィルター (純粋関数) --- */
 function extractPeerValue(a, fieldKey){
   if(!fieldKey || fieldKey === 'total') return a.total || 0;
-  const gi = Number(fieldKey);
+  const gi = Number(fieldKey.indexOf('g') === 0 ? fieldKey.slice(1) : fieldKey);
   return (a.groupTotals && a.groupTotals[gi]) || 0;
 }
 function histogramBinSize(values){
@@ -998,7 +1016,7 @@ function aggregatePeerAssessments(assessments, options){
   const filtered = assessments.filter(a => {
     if(includedReviewerUids && !includedReviewerUids.has(a.authorUid)) return false;
     const attrs = a.reviewerAttributesSnapshot || {};
-    return segmentKeys.every(key => (SEGMENT_PREDICATES[key] ? SEGMENT_PREDICATES[key](attrs) : true));
+    return segmentKeys.every(key => segmentMatches(attrs, key));
   });
   const count = filtered.length;
   if(count === 0) return { count: 0, average: null, distribution: null, breakdown: null };
@@ -1022,6 +1040,95 @@ function aggregatePeerAssessments(assessments, options){
     distribution: buildHistogram(values, histogramBinSize(values)),
     breakdown: filtered.map((a, i) => ({ reviewerUid: a.authorUid, label: labels[i], total: values[i] })),
   };
+}
+// fieldKey: 'total' | 'g<groupIndex>' | 'leaf:<leafId>'
+function parsePeerFieldKey(fieldKey){
+  if(!fieldKey || fieldKey === 'total') return { kind:'total' };
+  if(fieldKey.indexOf('leaf:') === 0) return { kind:'leaf', leafId: fieldKey.slice(5) };
+  if(fieldKey.indexOf('g') === 0) return { kind:'group', gi: Number(fieldKey.slice(1)) };
+  return { kind:'total' };
+}
+function filterPeerAssessments(assessments, includedReviewerUids, segmentKeys){
+  return assessments.filter(a => {
+    if(includedReviewerUids && !includedReviewerUids.has(a.authorUid)) return false;
+    const attrs = a.reviewerAttributesSnapshot || {};
+    return segmentKeys.every(key => segmentMatches(attrs, key));
+  });
+}
+function peerReviewerLabel(a, idx, anonymous, friendProfiles){
+  return anonymous
+    ? `フレンド${String.fromCharCode(65 + idx)}`
+    : ((friendProfiles[a.authorUid] && friendProfiles[a.authorUid].nickname) || a.reviewerDisplayName || '不明');
+}
+// 項目(リーフ)単位の統計: レベルキー(初級者など)を集計する。
+// groupLeafItems() はサブ項目でも親項目名(例:「足系球技」)を返すため、
+// 称号の条件判定には使えても、統計でサッカー/野球のような具体的な項目名を
+// 出すには使えない。ここではサブ項目名(sub.n)を優先して返す版を別途用意する。
+function groupLeafItemsDetailed(groupIndex){
+  const g = GROUPS[groupIndex];
+  const leaves = [];
+  g.items.forEach((item, ii) => {
+    if(item.subs){
+      item.subs.forEach((sub, si) => {
+        leaves.push({ id:`g${groupIndex}i${ii}s${si}`, name: sub.n || item.name });
+      });
+    } else {
+      leaves.push({ id:`g${groupIndex}i${ii}`, name: item.name });
+    }
+  });
+  return leaves;
+}
+function aggregatePeerLeafLevel(assessments, options, leafId){
+  const { includedReviewerUids = null, segmentKeys = [], anonymous = false, friendProfiles = {} } = options;
+  const base = filterPeerAssessments(assessments, includedReviewerUids, segmentKeys);
+  const filtered = base.filter(a => {
+    const key = a.levelSnapshot && a.levelSnapshot[leafId];
+    return !!key && key !== 'none';
+  });
+  const count = filtered.length;
+  if(count === 0) return { count: 0 };
+  const keys = filtered.map(a => a.levelSnapshot[leafId]);
+  const values = keys.map(k => levelValueByKey(k));
+  const labels = filtered.map((a, i) => peerReviewerLabel(a, i, anonymous, friendProfiles));
+  const avgValue = values.reduce((s, v) => s + v, 0) / count;
+  const avgKey = nearestLevelKey(avgValue);
+  let maxIdx = 0, minIdx = 0;
+  values.forEach((v, i) => { if(v > values[maxIdx]) maxIdx = i; if(v < values[minIdx]) minIdx = i; });
+  const freq = new Map();
+  keys.forEach(k => freq.set(k, (freq.get(k) || 0) + 1));
+  let modeKey = null, modeCount = 0;
+  freq.forEach((c, k) => { if(c > modeCount){ modeCount = c; modeKey = k; } });
+  const distribution = LEVELS.filter(l => l.key !== 'none')
+    .map(l => ({ key: l.key, label: LEVEL_FULL[lang][l.key], count: keys.filter(k => k === l.key).length }))
+    .filter(d => d.count > 0);
+  return {
+    count,
+    avgKey, avgLabel: LEVEL_FULL[lang][avgKey],
+    maxLabel: LEVEL_FULL[lang][keys[maxIdx]], maxWho: labels[maxIdx],
+    minLabel: LEVEL_FULL[lang][keys[minIdx]], minWho: labels[minIdx],
+    modeLabel: modeKey ? LEVEL_FULL[lang][modeKey] : null, modeCount,
+    distribution,
+    breakdown: filtered.map((a, i) => ({ reviewerUid: a.authorUid, label: labels[i], levelLabel: LEVEL_FULL[lang][keys[i]] })),
+  };
+}
+// グループ(分野)内で、どの項目が一番高い/低いレベルだったかを横断的に調べる。
+function aggregateGroupItemExtremes(assessments, options, gi){
+  const { includedReviewerUids = null, segmentKeys = [], anonymous = false, friendProfiles = {} } = options;
+  const filtered = filterPeerAssessments(assessments, includedReviewerUids, segmentKeys);
+  const labels = filtered.map((a, i) => peerReviewerLabel(a, i, anonymous, friendProfiles));
+  const leaves = groupLeafItemsDetailed(gi);
+  let best = null, worst = null;
+  filtered.forEach((a, ai) => {
+    leaves.forEach(leaf => {
+      const key = a.levelSnapshot && a.levelSnapshot[leaf.id];
+      if(!key || key === 'none') return;
+      const val = levelValueByKey(key);
+      const entry = { leafName: leaf.name, levelKey: key, val, who: labels[ai] };
+      if(!best || val > best.val) best = entry;
+      if(!worst || val < worst.val) worst = entry;
+    });
+  });
+  return { best, worst };
 }
 function buildHistogram(totals, binSize){
   binSize = binSize || 10;
@@ -1280,21 +1387,28 @@ function renderPeerReviewSection(containerId){
   const segmentId = containerId + '-segmentFilterSelect';
   const anonBtnId = containerId + '-anonymousToggleBtn';
   const resultId = containerId + '-peerAverageResult';
-  const fieldOptions = [{ v:'total', l: lang === 'en' ? 'All fields' : 'すべての分野(総合)' }]
-    .concat(GROUPS.map((g, gi) => ({ v:String(gi), l: tName(g.name) })));
+  const fieldSelectHTML = `<option value="total">${lang === 'en' ? 'All fields (total)' : 'すべての分野(総合)'}</option>`
+    + GROUPS.map((g, gi) => {
+        const groupLabel = tName(g.name);
+        const itemsHTML = groupLeafItemsDetailed(gi).map(leaf => `<option value="leaf:${leaf.id}">${escapeHTML(tName(leaf.name))}</option>`).join('');
+        return `<optgroup label="${escapeHTML(groupLabel)}">
+          <option value="g${gi}">${escapeHTML(groupLabel)}(${lang === 'en' ? 'category total' : '分野合計'})</option>
+          ${itemsHTML}
+        </optgroup>`;
+      }).join('');
   el.innerHTML = `
     <div class="stat-section-title">${lang === 'en' ? 'Statistics of Evaluations About You' : '自分に対する評価の統計'}</div>
     <div class="settings-row">
       <span class="settings-label">${lang === 'en' ? 'Field' : '集計する分野'}</span>
       <select id="${fieldId}" style="flex:1; min-width:160px;">
-        ${fieldOptions.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}
+        ${fieldSelectHTML}
       </select>
     </div>
     <div id="${checklistId}"></div>
     <div class="settings-row">
       <span class="settings-label">属性で絞り込み</span>
-      <select id="${segmentId}" multiple style="flex:1; min-width:160px;">
-        ${SEGMENT_OPTIONS.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}
+      <select id="${segmentId}" multiple style="flex:1; min-width:160px; height:90px;">
+        ${SEGMENT_GROUPS.map(g => `<optgroup label="${escapeHTML(g.label)}">${g.options.map(o => `<option value="${o.v}">${o.l}</option>`).join('')}</optgroup>`).join('')}
       </select>
     </div>
     <div class="settings-row">
@@ -1341,14 +1455,25 @@ function renderPeerReviewSection(containerId){
     );
     const segmentKeys = Array.from(document.getElementById(segmentId).selectedOptions).map(o => o.value);
     const fieldKey = document.getElementById(fieldId).value;
-    const result = aggregatePeerAssessments(peerAssessments, {
+    const parsed = parsePeerFieldKey(fieldKey);
+    const commonOpts = {
       includedReviewerUids: includedUids.size ? includedUids : null,
       segmentKeys,
       anonymous: anonymousOn,
-      fieldKey,
       friendProfiles,
-    });
-    renderPeerResult(resultId, result);
+    };
+    if(parsed.kind === 'leaf'){
+      const result = aggregatePeerLeafLevel(peerAssessments, commonOpts, parsed.leafId);
+      renderPeerLeafResult(resultId, result);
+    } else {
+      const legacyFieldKey = parsed.kind === 'group' ? ('g' + parsed.gi) : 'total';
+      const result = aggregatePeerAssessments(peerAssessments, Object.assign({ fieldKey: legacyFieldKey }, commonOpts));
+      renderPeerResult(resultId, result);
+      if(parsed.kind === 'group'){
+        const extremes = aggregateGroupItemExtremes(peerAssessments, commonOpts, parsed.gi);
+        renderGroupItemExtremes(resultId, extremes);
+      }
+    }
   }
   recomputePeerAverage();
 }
@@ -1376,6 +1501,46 @@ function renderPeerResult(resultId, result){
   }
   html += '<ul style="padding-left:18px; margin:8px 0 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${b.total.toFixed(1)}pt</li>`).join('') + '</ul>';
   el.innerHTML = html;
+}
+
+function renderPeerLeafResult(resultId, result){
+  const el = document.getElementById(resultId);
+  if(!el) return;
+  if(!result.count){ el.innerHTML = '該当する評価がありません（算入にチェックを入れてください）'; return; }
+  const modeDisplay = result.modeCount > 1 ? result.modeLabel : (lang === 'en' ? 'None (all differ)' : 'なし(全員が異なる値)');
+  let html = `<div class="stat-cards">
+    <div class="stat-card" style="--sc:#2f7dd1;"><div class="stat-label">${lang === 'en' ? 'Count' : '対象人数'}</div><div class="stat-value">${result.count}${lang === 'en' ? '' : '人'}</div></div>
+    <div class="stat-card" style="--sc:#12977a;"><div class="stat-label">${lang === 'en' ? 'Average' : '平均値'}</div><div class="stat-value">${escapeHTML(result.avgLabel)}</div></div>
+    <div class="stat-card" style="--sc:#f4c542;"><div class="stat-label">${lang === 'en' ? 'Max' : '最高値'}</div><div class="stat-value">${escapeHTML(result.maxLabel)}</div><div class="stat-sub">${escapeHTML(result.maxWho)}</div></div>
+    <div class="stat-card" style="--sc:#a53a35;"><div class="stat-label">${lang === 'en' ? 'Min' : '最低値'}</div><div class="stat-value">${escapeHTML(result.minLabel)}</div><div class="stat-sub">${escapeHTML(result.minWho)}</div></div>
+    <div class="stat-card" style="--sc:#8b5cf6;"><div class="stat-label">${lang === 'en' ? 'Mode' : '最頻値'}</div><div class="stat-value">${escapeHTML(modeDisplay)}</div></div>
+  </div>`;
+  if(result.distribution && result.distribution.length){
+    const maxCount = Math.max(...result.distribution.map(d => d.count), 1);
+    html += `<div class="peer-hist">` + result.distribution.map(d => `
+      <div class="peer-hist-row">
+        <span class="peer-hist-label">${escapeHTML(d.label)}</span>
+        <div class="peer-hist-track"><div class="peer-hist-bar" style="width:${Math.round(d.count / maxCount * 100)}%;"></div></div>
+        <span class="peer-hist-count">${d.count}</span>
+      </div>`).join('') + `</div>`;
+  }
+  html += '<ul style="padding-left:18px; margin:8px 0 0;">' + result.breakdown.map(b => `<li>${escapeHTML(b.label)}: ${escapeHTML(b.levelLabel)}</li>`).join('') + '</ul>';
+  el.innerHTML = html;
+}
+
+function renderGroupItemExtremes(resultId, extremes){
+  const el = document.getElementById(resultId);
+  if(!el || !extremes || (!extremes.best && !extremes.worst)) return;
+  let html = `<div class="stat-section-title" style="margin-top:14px;">${lang === 'en' ? 'Highest / Lowest Item in This Category' : 'このグループ内の項目別 最高・最低'}</div>`;
+  html += `<div class="stat-cards">`;
+  if(extremes.best){
+    html += `<div class="stat-card" style="--sc:#f4c542;"><div class="stat-label">${lang === 'en' ? 'Highest item' : '最高値の項目'}</div><div class="stat-value">${escapeHTML(tName(extremes.best.leafName))}</div><div class="stat-sub">${escapeHTML(LEVEL_FULL[lang][extremes.best.levelKey])} ・ ${escapeHTML(extremes.best.who)}</div></div>`;
+  }
+  if(extremes.worst){
+    html += `<div class="stat-card" style="--sc:#a53a35;"><div class="stat-label">${lang === 'en' ? 'Lowest item' : '最低値の項目'}</div><div class="stat-value">${escapeHTML(tName(extremes.worst.leafName))}</div><div class="stat-sub">${escapeHTML(LEVEL_FULL[lang][extremes.worst.levelKey])} ・ ${escapeHTML(extremes.worst.who)}</div></div>`;
+  }
+  html += `</div>`;
+  el.insertAdjacentHTML('beforeend', html);
 }
 
 const NAME_EN = {
