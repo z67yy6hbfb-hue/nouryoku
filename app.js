@@ -141,7 +141,7 @@ if(firebaseAuth){
 
 let lang = 'ja';
 let reviewerName = '';
-let reviewerOwnerMarkOff = false; // 鑑定者欄の「主として記録」チェックを外した場合 true
+let reviewerOwnerMarkOff = true; // 鑑定者欄の「主として記録」チェックを外した場合 true (デフォルトはOFF、マイページの名前と一致したら自動でON)
 
 const UI_TEXT = {
   title: { ja:'能力鑑定団', en:'Ability Appraisal Guild' },
@@ -2439,6 +2439,11 @@ document.addEventListener('input', (e) => {
   }
   if(e.target.id === 'reviewerInput'){
     reviewerName = e.target.value;
+    const myName = ((myProfileAttrs && myProfileAttrs.nickname) || '').trim();
+    const isOwnerMatch = !!myName && reviewerName.trim() === myName;
+    const ownerCheckbox = document.getElementById('reviewerIsOwnerCheckbox');
+    if(ownerCheckbox) ownerCheckbox.checked = isOwnerMatch;
+    reviewerOwnerMarkOff = !isOwnerMatch;
   }
 });
 document.getElementById('reviewerIsOwnerCheckbox').addEventListener('change', (e) => {
