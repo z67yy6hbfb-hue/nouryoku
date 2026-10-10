@@ -174,30 +174,18 @@
 
     <div id="rankingList" class="ranking-list"></div>
 
-    <button class="next-page-btn" id="toTitlesBtn" style="display:none;" title="称号ページへ移動します">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
-    <button class="next-page-btn" id="goToSimulateBtn" title="分野・項目ごとに重みを変えて、ランキングの変化を試せる設定ページへ移動します(実際のランキングには影響しません)">🧪 重み付けの設定 →</button>
-    <button class="next-page-btn" id="backBtn" style="display:none;" title="鑑定書(入力画面)に戻ります">← 鑑定書に戻る</button>
-  </div>
-</div>
-
-<div class="doc" id="pageSimulateWeights" style="display:none;">
-  <div class="frame">
-    <div class="corner-marks"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
-
-    <div class="eyebrow-doc">Simulation</div>
-    <h1>重み付け設定</h1>
-    <div class="title-divider"></div>
-    <div class="subtitle">分野ごと、またはサッカー・バスケなど項目(種目)ごとに個別の重みを設定できます(実際のランキングには影響しません)</div>
-
-    <div id="simWeightsEditor"></div>
-
-    <div class="mp-save-bar">
-      <button class="mp-save-btn" id="simSaveWeightsBtn" title="設定した重みをこの端末に保存します">重みを保存</button>
-      <span id="simSaveStatus" class="mp-save-status"></span>
+    <div id="rankSimWeightsArea" style="display:none;">
+      <div class="subtitle">分野ごと、またはサッカー・バスケなど項目(種目)ごとに個別の重みを設定できます(実際のランキングには影響しません)</div>
+      <div id="simWeightsEditor"></div>
+      <div class="mp-save-bar">
+        <button class="mp-save-btn" id="simSaveWeightsBtn" title="設定した重みをこの端末に保存します">重みを保存</button>
+        <span id="simSaveStatus" class="mp-save-status"></span>
+      </div>
+      <button class="next-page-btn" id="goToSimulateRankingBtn" title="設定した重みでランキングがどう変わるかを「変動後のランキング」タブで見ます">📊 この重みでのシミュレーション結果を見る →</button>
     </div>
 
-    <button class="next-page-btn" id="goToSimulateRankingBtn" title="設定した重みでランキングがどう変わるかを、ランキングページの「シミュレーション」タブで見ます">📊 この重みでのシミュレーション結果を見る →</button>
-    <button class="next-page-btn" id="backFromSimulateBtn" title="ランキングページに戻ります">← ランキングに戻る</button>
+    <button class="next-page-btn" id="toTitlesBtn" style="display:none;" title="称号ページへ移動します">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
+    <button class="next-page-btn" id="backBtn" style="display:none;" title="鑑定書(入力画面)に戻ります">← 鑑定書に戻る</button>
   </div>
 </div>
 

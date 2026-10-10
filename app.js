@@ -3025,24 +3025,36 @@ function renderRankModeTabs(){
   if(!el) return;
   const modes = [
     { key:'default', label: lang === 'en' ? 'Default' : 'デフォルト' },
-    { key:'variable', label: lang === 'en' ? 'Variable' : '変動数' },
     { key:'simulation', label: lang === 'en' ? 'Weight Settings' : '重みづけ設定' },
     { key:'simResult', label: lang === 'en' ? 'Simulated Ranking' : '変動後のランキング' },
   ];
   el.innerHTML = modes.map(m => `<button class="rank-mode-tab${m.key===currentRankMainMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
   el.querySelectorAll('.rank-mode-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      if(btn.dataset.mode === 'simulation'){
-        showPage('simulateWeights');
-        return;
-      }
       currentRankMainMode = btn.dataset.mode;
       el.querySelectorAll('.rank-mode-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      renderRankTabs();
-      renderRankingList(currentRankMode);
+      updateRankView();
     });
   });
+}
+async function updateRankView(){
+  const tabsEl = document.getElementById('rankTabs');
+  const listEl = document.getElementById('rankingList');
+  const weightsArea = document.getElementById('rankSimWeightsArea');
+  if(currentRankMainMode === 'simulation'){
+    tabsEl.style.display = 'none';
+    listEl.style.display = 'none';
+    weightsArea.style.display = 'block';
+    await loadSimWeights();
+    renderSimWeightsEditor();
+  } else {
+    weightsArea.style.display = 'none';
+    tabsEl.style.display = '';
+    listEl.style.display = '';
+    renderRankTabs();
+    renderRankingList(currentRankMode);
+  }
 }
 
 let compareEntries = [];
@@ -3950,14 +3962,12 @@ async function loadRanking(){
     if(entries.length === 0){
       rankEntriesCache = [];
       renderRankModeTabs();
-      renderRankTabs();
-      renderRankingList(currentRankMode);
+      updateRankView();
       return;
     }
     rankEntriesCache = entries;
     renderRankModeTabs();
-    renderRankTabs();
-    renderRankingList(currentRankMode);
+    updateRankView();
   }catch(err){
     console.warn('loadRanking error:', err);
     const detail = (err && err.message) ? err.message : String(err);
@@ -4044,11 +4054,6 @@ function renderSimWeightsEditor(){
     });
   });
 }
-async function loadSimulateWeightsPage(){
-  await loadSimWeights();
-  renderSimWeightsEditor();
-}
-
 function renderRankTabs(){
   const tabsEl = document.getElementById('rankTabs');
   if(currentRankMainMode === 'variable'){
@@ -5897,7 +5902,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', simulateWeights:'pageSimulateWeights', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
+  const pages = { cert:'pageCert', rank:'pageRank', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -5907,7 +5912,6 @@ function showPage(pageName){
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if(pageName === 'rank') loadRanking();
-  if(pageName === 'simulateWeights') loadSimulateWeightsPage();
   if(pageName === 'titles'){
     renderTitlesTabs();
     renderTitleLegend();
@@ -5931,11 +5935,10 @@ document.getElementById('toRankingBtn').addEventListener('click', () => showPage
 document.getElementById('backBtn').addEventListener('click', () => showPage('cert'));
 document.getElementById('toTitlesBtn').addEventListener('click', () => showPage('titles'));
 document.getElementById('backFromTitlesBtn').addEventListener('click', () => showPage('rank'));
-document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulateWeights'));
-document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => {
   currentRankMainMode = 'simResult';
-  showPage('rank');
+  renderRankModeTabs();
+  updateRankView();
 });
 document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('simSaveStatus');
