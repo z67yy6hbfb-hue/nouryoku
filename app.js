@@ -3636,10 +3636,10 @@ function localEntryRowOpts(entry, myName, kind){
   };
 }
 function appendLocalGroupRows(el, entries, myName, kind){
-  entries
+  return entries
     .filter(e => classifyLocalEntry(e, myName) === kind)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .forEach(entry => appendAssessmentRow(el, localEntryRowOpts(entry, myName, kind)));
+    .map(entry => ({ entry, el: appendAssessmentRow(el, localEntryRowOpts(entry, myName, kind)) }));
 }
 
 async function loadMySelfAssessment(){
@@ -3740,13 +3740,18 @@ function renderOthersSortTabs(){
 // 並び順を壊さずに一致行だけを上に持ってこられる。
 function applyOthersSortAndFilter(){
   const container = document.getElementById('othersContent');
-  const input = document.getElementById('othersSearchInput');
-  if(!container || !input) return;
-  const q = input.value.trim().toLowerCase();
+  const reviewerInput = document.getElementById('othersSearchReviewerInput');
+  const targetInput = document.getElementById('othersSearchTargetInput');
+  if(!container || !reviewerInput || !targetInput) return;
+  const qReviewer = reviewerInput.value.trim().toLowerCase();
+  const qTarget = targetInput.value.trim().toLowerCase();
   const myName = ((myProfileAttrs && myProfileAttrs.nickname) || '').trim();
-  const isMatch = (rd) => q
-    ? (rd.reviewer.toLowerCase().includes(q) || rd.target.toLowerCase().includes(q))
-    : (!!myName && rd.reviewer === myName);
+  const isMatch = (rd) => {
+    if(!qReviewer && !qTarget) return !!myName && rd.reviewer === myName;
+    const reviewerOk = !qReviewer || rd.reviewer.toLowerCase().includes(qReviewer);
+    const targetOk = !qTarget || rd.target.toLowerCase().includes(qTarget);
+    return reviewerOk && targetOk;
+  };
   const comparator = OTHERS_SORT_COMPARATORS[currentOthersSort] || OTHERS_SORT_COMPARATORS.date_desc;
   const sorted = othersRowsData.slice().sort((a, b) => {
     const am = isMatch(a) ? 0 : 1;
@@ -3760,8 +3765,10 @@ function applyOthersSortAndFilter(){
   });
 }
 (function initOthersSearch(){
-  const input = document.getElementById('othersSearchInput');
-  if(input) input.addEventListener('input', applyOthersSortAndFilter);
+  const reviewerInput = document.getElementById('othersSearchReviewerInput');
+  const targetInput = document.getElementById('othersSearchTargetInput');
+  if(reviewerInput) reviewerInput.addEventListener('input', applyOthersSortAndFilter);
+  if(targetInput) targetInput.addEventListener('input', applyOthersSortAndFilter);
 })();
 
 async function loadOthersAssessments(){
@@ -3896,9 +3903,23 @@ async function loadOthersAssessments(){
   }
 }
 
+let group2RowsData = [];
+function applyGroup2Filter(){
+  const input = document.getElementById('group2SearchInput');
+  if(!input) return;
+  const q = input.value.trim().toLowerCase();
+  group2RowsData.forEach(rd => {
+    rd.el.style.display = (!q || rd.reviewer.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+(function initGroup2Search(){
+  const input = document.getElementById('group2SearchInput');
+  if(input) input.addEventListener('input', applyGroup2Filter);
+})();
 async function loadOthersAssessedMe(){
   const el = document.getElementById('group2Content');
   if(!el) return;
+  group2RowsData = [];
   if(!firebaseUser){
     el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'Sign in with Google to see assessments others made of you.' : 'Googleでログインすると、他人から鑑定された記録を見られます。'}</div>`;
     return;
@@ -3921,12 +3942,16 @@ async function loadOthersAssessedMe(){
           editable: false,
         });
         appendImportButton(row, reviewerName || '', a);
+        group2RowsData.push({ el: row, reviewer: name });
       });
     }catch(err){ console.warn('loadOthersAssessedMe (internet part) failed:', err); }
-    appendLocalGroupRows(el, entries, myName, 'otherToMe');
+    appendLocalGroupRows(el, entries, myName, 'otherToMe').forEach(({ el: rowEl, entry }) => {
+      group2RowsData.push({ el: rowEl, reviewer: entry.reviewerName || t('anon') });
+    });
     if(!el.children.length){
       el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No one has assessed you yet.' : 'まだ誰からも鑑定されていません。'}</div>`;
     }
+    applyGroup2Filter();
   }catch(err){
     console.warn('loadOthersAssessedMe error:', err);
     el.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;

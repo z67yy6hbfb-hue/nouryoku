@@ -261,6 +261,7 @@
       <div id="group1Content"></div>
 
       <div class="stat-section-title" id="group2TitleEl">他人が自分を鑑定した結果</div>
+      <input type="text" id="group2SearchInput" class="friend-search-input" placeholder="鑑定者名で検索" autocomplete="off">
       <div id="group2Content"></div>
       <div id="dataPeerReview"></div>
     </div>
@@ -268,7 +269,8 @@
     <div id="dataPageOthers" style="display:none;">
       <div class="stat-section-title" id="othersTitleEl">他者に対する鑑定結果</div>
       <div class="catalog-sort-tabs" id="othersSortTabs"></div>
-      <input type="text" id="othersSearchInput" class="friend-search-input" placeholder="鑑定者・対象者名で検索(未入力時は主が鑑定した記録を表示)" autocomplete="off">
+      <input type="text" id="othersSearchReviewerInput" class="friend-search-input" placeholder="鑑定者名で検索" autocomplete="off">
+      <input type="text" id="othersSearchTargetInput" class="friend-search-input" placeholder="鑑定対象者名で検索(どちらも未入力時は主が鑑定した記録を表示)" autocomplete="off">
       <div id="othersContent"></div>
     </div>
 
