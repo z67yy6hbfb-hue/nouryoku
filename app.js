@@ -3983,10 +3983,11 @@ async function saveSimWeights(){
     return true;
   }catch(err){ console.warn('saveSimWeights failed:', err); return false; }
 }
-function simulateEntryTotal(entry, weights){
-  if(!entry.levelSnapshot) return entry.total || 0;
+function simulateEntryTotal(entry, weights, gi){
+  if(!entry.levelSnapshot) return (gi === undefined || gi === null) ? (entry.total || 0) : ((entry.groupTotals && entry.groupTotals[gi]) || 0);
   let total = 0;
   ALL_LEAVES.forEach(leaf => {
+    if(gi !== undefined && gi !== null && leaf.gi !== gi) return;
     const key = entry.levelSnapshot[leaf.id];
     if(!key || key === 'none') return;
     const levelVal = levelValueByKey(key) || 0;
@@ -4002,6 +4003,21 @@ function simulateEntryTotal(entry, weights){
     total += levelVal * w;
   });
   return total;
+}
+let currentSimRankMode = 'total';
+function renderSimRankTabs(){
+  const tabsEl = document.getElementById('simRankTabs');
+  if(!tabsEl) return;
+  const modes = [{key:'total', label:t('overall')}].concat(GROUPS.map((g, gi) => ({key:String(gi), label:tName(g.name)})));
+  tabsEl.innerHTML = modes.map(m => `<button class="rank-tab${m.key===currentSimRankMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
+  tabsEl.querySelectorAll('.rank-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentSimRankMode = btn.dataset.mode;
+      tabsEl.querySelectorAll('.rank-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      recomputeSimulation();
+    });
+  });
 }
 function renderSimWeightsEditor(){
   const el = document.getElementById('simWeightsEditor');
@@ -4046,15 +4062,18 @@ function recomputeSimulation(){
     listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
     return;
   }
-  const scored = visible.map(entry => ({ entry, simTotal: simulateEntryTotal(entry, simWeights) }));
+  const isTotal = currentSimRankMode === 'total';
+  const gi = isTotal ? null : parseInt(currentSimRankMode, 10);
+  const scored = visible.map(entry => ({ entry, simTotal: simulateEntryTotal(entry, simWeights, gi) }));
   scored.sort((a, b) => b.simTotal - a.simTotal);
   listEl.innerHTML = scored.slice(0, RANKING_DISPLAY_LIMIT).map((s, i) => {
     const rank = i + 1;
     const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+    const value = isTotal ? fmtScore(rankingScore(s.simTotal)) : `${(s.simTotal || 0).toFixed(1)} ${t('pt')}`;
     return `<div class="rank-row">
       <div class="rank-badge rn">${medalEmoji || rank}</div>
       <div class="rank-info"><div class="rank-name">${escapeHTML(s.entry.name || t('anon'))}</div></div>
-      <div class="rank-amount">${fmtScore(rankingScore(s.simTotal))}</div>
+      <div class="rank-amount">${value}</div>
     </div>`;
   }).join('');
 }
@@ -4074,6 +4093,7 @@ async function loadSimulateRankingPage(){
       entries = await fetchLeaderboardEntries();
       rankEntriesCache = entries;
     }
+    renderSimRankTabs();
     recomputeSimulation();
   }catch(err){
     console.warn('loadSimulateRankingPage error:', err);
@@ -5960,6 +5980,8 @@ document.getElementById('goToSimulateBtn').addEventListener('click', () => showP
 document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => showPage('simulateRanking'));
 document.getElementById('backToSimulateWeightsBtn').addEventListener('click', () => showPage('simulateWeights'));
+document.getElementById('goToSimulateRankingFromRankBtn').addEventListener('click', () => showPage('simulateRanking'));
+document.getElementById('backToRankFromSimulateRankingBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('simSaveStatus');
   statusEl.textContent = lang === 'en' ? 'Saving…' : '保存中…';

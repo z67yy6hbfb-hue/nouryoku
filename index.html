@@ -176,6 +176,7 @@
 
     <button class="next-page-btn" id="toTitlesBtn" style="display:none;" title="称号ページへ移動します">🏅 <span id="toTitlesText">称号ページを見る</span> →</button>
     <button class="next-page-btn" id="goToSimulateBtn" title="分野・項目ごとに重みを変えて、ランキングの変化を試せるページへ移動します(実際のランキングには影響しません)">🧪 重み付けランキングシミュレーション →</button>
+    <button class="next-page-btn" id="goToSimulateRankingFromRankBtn" title="保存済みの重み設定でシミュレーションしたランキング結果を直接見ます(実際のランキングには影響しません)">📊 シミュレーションランキングを見る →</button>
     <button class="next-page-btn" id="backBtn" style="display:none;" title="鑑定書(入力画面)に戻ります">← 鑑定書に戻る</button>
   </div>
 </div>
@@ -210,9 +211,12 @@
     <div class="title-divider"></div>
     <div class="subtitle">設定した重みでランキングを再計算した結果です(実際のランキングには影響しません)</div>
 
+    <div class="rank-tabs" id="simRankTabs"></div>
+
     <div id="simResultList" class="ranking-list"></div>
 
     <button class="next-page-btn" id="backToSimulateWeightsBtn" title="重みの設定ページに戻ります">← 重み付け設定に戻る</button>
+    <button class="next-page-btn" id="backToRankFromSimulateRankingBtn" title="鑑定ランキングページに戻ります">← ランキングに戻る</button>
   </div>
 </div>
 
