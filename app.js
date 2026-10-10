@@ -3026,6 +3026,7 @@ function renderRankModeTabs(){
   const modes = [
     { key:'default', label: lang === 'en' ? 'Default' : 'デフォルト' },
     { key:'variable', label: lang === 'en' ? 'Variable' : '変動数' },
+    { key:'simulation', label: lang === 'en' ? 'Simulation' : 'シミュレーション' },
   ];
   el.innerHTML = modes.map(m => `<button class="rank-mode-tab${m.key===currentRankMainMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
   el.querySelectorAll('.rank-mode-tab').forEach(btn => {
@@ -3939,6 +3940,7 @@ async function loadRanking(){
     const [entries] = await Promise.all([
       fetchLeaderboardEntries(),
       ensureMyProfileAttrsLoadedIfSignedIn(),
+      loadSimWeights(),
     ]);
     if(entries.length === 0){
       rankEntriesCache = [];
@@ -4004,21 +4006,6 @@ function simulateEntryTotal(entry, weights, gi){
   });
   return total;
 }
-let currentSimRankMode = 'total';
-function renderSimRankTabs(){
-  const tabsEl = document.getElementById('simRankTabs');
-  if(!tabsEl) return;
-  const modes = [{key:'total', label:t('overall')}].concat(GROUPS.map((g, gi) => ({key:String(gi), label:tName(g.name)})));
-  tabsEl.innerHTML = modes.map(m => `<button class="rank-tab${m.key===currentSimRankMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
-  tabsEl.querySelectorAll('.rank-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      currentSimRankMode = btn.dataset.mode;
-      tabsEl.querySelectorAll('.rank-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      recomputeSimulation();
-    });
-  });
-}
 function renderSimWeightsEditor(){
   const el = document.getElementById('simWeightsEditor');
   if(!el) return;
@@ -4043,62 +4030,18 @@ function renderSimWeightsEditor(){
   el.querySelectorAll('.sim-group-input').forEach(input => {
     input.addEventListener('change', () => {
       simWeights.groups[input.dataset.gi] = input.value === '' ? 1 : parseFloat(input.value);
-      recomputeSimulation();
     });
   });
   el.querySelectorAll('.sim-leaf-input').forEach(input => {
     input.addEventListener('change', () => {
       if(input.value === ''){ delete simWeights.leaves[input.dataset.leaf]; }
       else simWeights.leaves[input.dataset.leaf] = parseFloat(input.value);
-      recomputeSimulation();
     });
   });
-}
-function recomputeSimulation(){
-  const listEl = document.getElementById('simResultList');
-  if(!listEl) return;
-  const visible = (rankEntriesCache || []).filter(e => e.rankingVisible !== false && (e.mode || 'default') !== 'variable');
-  if(visible.length === 0){
-    listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
-    return;
-  }
-  const isTotal = currentSimRankMode === 'total';
-  const gi = isTotal ? null : parseInt(currentSimRankMode, 10);
-  const scored = visible.map(entry => ({ entry, simTotal: simulateEntryTotal(entry, simWeights, gi) }));
-  scored.sort((a, b) => b.simTotal - a.simTotal);
-  listEl.innerHTML = scored.slice(0, RANKING_DISPLAY_LIMIT).map((s, i) => {
-    const rank = i + 1;
-    const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
-    const value = isTotal ? fmtScore(rankingScore(s.simTotal)) : `${(s.simTotal || 0).toFixed(1)} ${t('pt')}`;
-    return `<div class="rank-row">
-      <div class="rank-badge rn">${medalEmoji || rank}</div>
-      <div class="rank-info"><div class="rank-name">${escapeHTML(s.entry.name || t('anon'))}</div></div>
-      <div class="rank-amount">${value}</div>
-    </div>`;
-  }).join('');
 }
 async function loadSimulateWeightsPage(){
   await loadSimWeights();
   renderSimWeightsEditor();
-}
-
-async function loadSimulateRankingPage(){
-  const listEl = document.getElementById('simResultList');
-  if(!listEl) return;
-  listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
-  try{
-    await loadSimWeights();
-    let entries = rankEntriesCache;
-    if(!entries || entries.length === 0){
-      entries = await fetchLeaderboardEntries();
-      rankEntriesCache = entries;
-    }
-    renderSimRankTabs();
-    recomputeSimulation();
-  }catch(err){
-    console.warn('loadSimulateRankingPage error:', err);
-    listEl.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
-  }
 }
 
 function renderRankTabs(){
@@ -5167,9 +5110,14 @@ function wireOwnerMarkDismiss(container){
   });
 }
 
+function entryRankRawValue(entry, isTotal, gi){
+  if(currentRankMainMode === 'simulation') return simulateEntryTotal(entry, simWeights, gi);
+  return isTotal ? (entry.total || 0) : ((entry.groupTotals && entry.groupTotals[gi]) || 0);
+}
 function renderRankingList(mode){
   const listEl = document.getElementById('rankingList');
-  const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === currentRankMainMode && e.rankingVisible !== false);
+  const filterMode = currentRankMainMode === 'simulation' ? 'default' : currentRankMainMode;
+  const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === filterMode && e.rankingVisible !== false);
   if(filtered.length === 0){
     listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
     return;
@@ -5199,11 +5147,7 @@ function renderRankingList(mode){
 
   const isTotal = mode === 'total';
   const gi = isTotal ? null : parseInt(mode, 10);
-  const sorted = filtered.slice().sort((a, b) => {
-    const av = isTotal ? (a.total || 0) : ((a.groupTotals && a.groupTotals[gi]) || 0);
-    const bv = isTotal ? (b.total || 0) : ((b.groupTotals && b.groupTotals[gi]) || 0);
-    return bv - av;
-  }).slice(0, RANKING_DISPLAY_LIMIT);
+  const sorted = filtered.slice().sort((a, b) => entryRankRawValue(b, isTotal, gi) - entryRankRawValue(a, isTotal, gi)).slice(0, RANKING_DISPLAY_LIMIT);
   const top3ModeKey = currentRankMainMode + ':' + mode;
   const newTop3 = sorted.slice(0, 3).map(e => e.key);
   const prevTop3 = lastTop3ByMode[top3ModeKey] || [];
@@ -5211,13 +5155,20 @@ function renderRankingList(mode){
   lastTop3ByMode[top3ModeKey] = newTop3;
 
   listEl.innerHTML = '';
+  if(currentRankMainMode === 'simulation'){
+    const note = document.createElement('div');
+    note.className = 'rank-note';
+    note.textContent = lang === 'en' ? 'Weighted simulation — does not affect the real ranking' : '重み付けシミュレーション中(実際のランキングには影響しません)';
+    listEl.appendChild(note);
+  }
   sorted.forEach((entry, i) => {
     const rank = i + 1;
     const badgeClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : 'rn';
     const tier = getRankTier(rank);
+    const rawVal = entryRankRawValue(entry, isTotal, gi);
     const value = isTotal
-      ? fmtScore(rankingScore(entry.total))
-      : `${((entry.groupTotals && entry.groupTotals[gi]) || 0).toFixed(1)} ${t('pt')}`;
+      ? fmtScore(rankingScore(rawVal))
+      : `${(rawVal || 0).toFixed(1)} ${t('pt')}`;
     const ownerBadge = ownerMarkHTML(entry, 'name');
     const row = document.createElement('div');
     row.className = 'rank-row' + (ownerBadge ? ' owner-row' : '');
@@ -5941,7 +5892,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', simulateWeights:'pageSimulateWeights', simulateRanking:'pageSimulateRanking', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
+  const pages = { cert:'pageCert', rank:'pageRank', simulateWeights:'pageSimulateWeights', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -5952,7 +5903,6 @@ function showPage(pageName){
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if(pageName === 'rank') loadRanking();
   if(pageName === 'simulateWeights') loadSimulateWeightsPage();
-  if(pageName === 'simulateRanking') loadSimulateRankingPage();
   if(pageName === 'titles'){
     renderTitlesTabs();
     renderTitleLegend();
@@ -5978,10 +5928,10 @@ document.getElementById('toTitlesBtn').addEventListener('click', () => showPage(
 document.getElementById('backFromTitlesBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulateWeights'));
 document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
-document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => showPage('simulateRanking'));
-document.getElementById('backToSimulateWeightsBtn').addEventListener('click', () => showPage('simulateWeights'));
-document.getElementById('goToSimulateRankingFromRankBtn').addEventListener('click', () => showPage('simulateRanking'));
-document.getElementById('backToRankFromSimulateRankingBtn').addEventListener('click', () => showPage('rank'));
+document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => {
+  currentRankMainMode = 'simulation';
+  showPage('rank');
+});
 document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('simSaveStatus');
   statusEl.textContent = lang === 'en' ? 'Saving…' : '保存中…';
