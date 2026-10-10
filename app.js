@@ -3287,7 +3287,7 @@ async function loadDataStats(){
     const variableEntries = entries.filter(e => e.mode === 'variable');
 
     function avg(arr, fn){ if(arr.length === 0) return 0; return arr.reduce((a, e) => a + fn(e), 0) / arr.length; }
-    const avgDefaultYen = avg(defaultEntries, e => e.yen || 0);
+    const avgDefaultYen = avg(defaultEntries, e => rankingScore(e.total));
 
     let html = '';
     html += `<div class="stat-section-title">${lang === 'en' ? 'Overview' : '概要'}</div>`;
@@ -3583,7 +3583,7 @@ function localEntryRowOpts(entry, myName, kind){
   const isMine = !!myName && (entry.reviewerName || '').trim() === myName;
   let title;
   if(kind === 'self'){
-    title = fmtScore(entry.yen || 0);
+    title = fmtScore(rankingScore(entry.total));
   } else if(kind === 'otherToMe'){
     title = escapeHTML(entry.reviewerName || t('anon'));
   } else if(kind === 'meToOther'){
@@ -3595,7 +3595,7 @@ function localEntryRowOpts(entry, myName, kind){
   }
   const meta = kind === 'self'
     ? `${fmtDate(entry.date)} ${t('appraisedSuffix')}`
-    : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(entry.yen || 0)}`;
+    : `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(rankingScore(entry.total))}`;
   const toggles = isMine ? MY_RECORD_VISIBILITY_FIELDS.map(({ field, label }) => `
       <label class="my-record-toggle" title="${lang==='en' ? 'Toggle whether this record appears there' : 'オンにすると、この記録が該当ページに表示されます'}">
         <input type="checkbox" class="my-record-vis-toggle" data-field="${field}" ${entry[field] !== false ? 'checked' : ''}>
@@ -3675,7 +3675,7 @@ function localOthersEntryRowOpts(entry, myName){
       </label>`).join('') : '';
   return {
     title: othersEntryTitle(entry.reviewerName, entry.name),
-    meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(entry.yen || 0)}`,
+    meta: `${fmtDate(entry.date)} ${t('appraisedSuffix')} ・ ${fmtScore(rankingScore(entry.total))}`,
     groupTotals: entry.groupTotals,
     levelMap: levelsFromAssessment(entry),
     editable: isMine,
@@ -3854,7 +3854,7 @@ async function loadOthersAssessments(){
       .forEach(entry => {
         rowBuilders.push({
           dateMs: new Date(entry.date).getTime() || 0,
-          amountYen: entry.yen || 0,
+          amountYen: rankingScore(entry.total),
           reviewer: entry.reviewerName || '', target: entry.name || '',
           build: (container) => appendAssessmentRow(container, localOthersEntryRowOpts(entry, myName)),
         });
@@ -5191,7 +5191,7 @@ function renderRankingList(mode){
     const badgeClass = rank === 1 ? 'r1' : rank === 2 ? 'r2' : rank === 3 ? 'r3' : 'rn';
     const tier = getRankTier(rank);
     const value = isTotal
-      ? fmtScore(entry.yen || 0)
+      ? fmtScore(rankingScore(entry.total))
       : `${((entry.groupTotals && entry.groupTotals[gi]) || 0).toFixed(1)} ${t('pt')}`;
     const ownerBadge = ownerMarkHTML(entry, 'name');
     const row = document.createElement('div');
