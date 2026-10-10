@@ -3027,6 +3027,7 @@ function renderRankModeTabs(){
     { key:'default', label: lang === 'en' ? 'Default' : 'デフォルト' },
     { key:'variable', label: lang === 'en' ? 'Variable' : '変動数' },
     { key:'simulation', label: lang === 'en' ? 'Weight Settings' : '重みづけ設定' },
+    { key:'simResult', label: lang === 'en' ? 'Simulated Ranking' : '変動後のランキング' },
   ];
   el.innerHTML = modes.map(m => `<button class="rank-mode-tab${m.key===currentRankMainMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
   el.querySelectorAll('.rank-mode-tab').forEach(btn => {
@@ -5115,12 +5116,12 @@ function wireOwnerMarkDismiss(container){
 }
 
 function entryRankRawValue(entry, isTotal, gi){
-  if(currentRankMainMode === 'simulation') return simulateEntryTotal(entry, simWeights, gi);
+  if(currentRankMainMode === 'simResult') return simulateEntryTotal(entry, simWeights, gi);
   return isTotal ? (entry.total || 0) : ((entry.groupTotals && entry.groupTotals[gi]) || 0);
 }
 function renderRankingList(mode){
   const listEl = document.getElementById('rankingList');
-  const filterMode = currentRankMainMode === 'simulation' ? 'default' : currentRankMainMode;
+  const filterMode = currentRankMainMode === 'simResult' ? 'default' : currentRankMainMode;
   const filtered = rankEntriesCache.filter(e => (e.mode || 'default') === filterMode && e.rankingVisible !== false);
   if(filtered.length === 0){
     listEl.innerHTML = `<div class="rank-empty">${t('rankEmpty')}</div>`;
@@ -5159,7 +5160,7 @@ function renderRankingList(mode){
   lastTop3ByMode[top3ModeKey] = newTop3;
 
   listEl.innerHTML = '';
-  if(currentRankMainMode === 'simulation'){
+  if(currentRankMainMode === 'simResult'){
     const note = document.createElement('div');
     note.className = 'rank-note';
     note.textContent = lang === 'en' ? 'Weighted simulation — does not affect the real ranking' : '重み付けシミュレーション中(実際のランキングには影響しません)';
@@ -5933,7 +5934,7 @@ document.getElementById('backFromTitlesBtn').addEventListener('click', () => sho
 document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulateWeights'));
 document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
 document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => {
-  currentRankMainMode = 'simulation';
+  currentRankMainMode = 'simResult';
   showPage('rank');
 });
 document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
