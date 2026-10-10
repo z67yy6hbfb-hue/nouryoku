@@ -4058,12 +4058,17 @@ function recomputeSimulation(){
     </div>`;
   }).join('');
 }
-async function loadSimulatePage(){
+async function loadSimulateWeightsPage(){
   await loadSimWeights();
   renderSimWeightsEditor();
+}
+
+async function loadSimulateRankingPage(){
   const listEl = document.getElementById('simResultList');
+  if(!listEl) return;
   listEl.innerHTML = `<div class="rank-empty">${t('rankLoading')}</div>`;
   try{
+    await loadSimWeights();
     let entries = rankEntriesCache;
     if(!entries || entries.length === 0){
       entries = await fetchLeaderboardEntries();
@@ -4071,7 +4076,7 @@ async function loadSimulatePage(){
     }
     recomputeSimulation();
   }catch(err){
-    console.warn('loadSimulatePage error:', err);
+    console.warn('loadSimulateRankingPage error:', err);
     listEl.innerHTML = `<div class="rank-empty">${t('rankError')}</div>`;
   }
 }
@@ -5916,7 +5921,7 @@ async function loadViewStats(){
 }
 
 function showPage(pageName){
-  const pages = { cert:'pageCert', rank:'pageRank', simulate:'pageSimulate', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
+  const pages = { cert:'pageCert', rank:'pageRank', simulateWeights:'pageSimulateWeights', simulateRanking:'pageSimulateRanking', titles:'pageTitles', compare:'pageCompare', share:'pageShare', data:'pageData', mypage:'pageMyPage', friends:'pageFriends' };
   Object.keys(pages).forEach(key => {
     const el = document.getElementById(pages[key]);
     if(el) el.style.display = (key === pageName) ? 'block' : 'none';
@@ -5926,7 +5931,8 @@ function showPage(pageName){
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if(pageName === 'rank') loadRanking();
-  if(pageName === 'simulate') loadSimulatePage();
+  if(pageName === 'simulateWeights') loadSimulateWeightsPage();
+  if(pageName === 'simulateRanking') loadSimulateRankingPage();
   if(pageName === 'titles'){
     renderTitlesTabs();
     renderTitleLegend();
@@ -5950,8 +5956,10 @@ document.getElementById('toRankingBtn').addEventListener('click', () => showPage
 document.getElementById('backBtn').addEventListener('click', () => showPage('cert'));
 document.getElementById('toTitlesBtn').addEventListener('click', () => showPage('titles'));
 document.getElementById('backFromTitlesBtn').addEventListener('click', () => showPage('rank'));
-document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulate'));
+document.getElementById('goToSimulateBtn').addEventListener('click', () => showPage('simulateWeights'));
 document.getElementById('backFromSimulateBtn').addEventListener('click', () => showPage('rank'));
+document.getElementById('goToSimulateRankingBtn').addEventListener('click', () => showPage('simulateRanking'));
+document.getElementById('backToSimulateWeightsBtn').addEventListener('click', () => showPage('simulateWeights'));
 document.getElementById('simSaveWeightsBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('simSaveStatus');
   statusEl.textContent = lang === 'en' ? 'Saving…' : '保存中…';
