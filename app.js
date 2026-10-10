@@ -3722,8 +3722,8 @@ function renderOthersSortTabs(){
   const modes = [
     { key:'date_desc', label: lang === 'en' ? 'Newest' : '新しい順' },
     { key:'date_asc', label: lang === 'en' ? 'Oldest' : '古い順' },
-    { key:'amount_desc', label: lang === 'en' ? 'Highest' : '金額が高い順' },
-    { key:'amount_asc', label: lang === 'en' ? 'Lowest' : '金額が低い順' },
+    { key:'amount_desc', label: lang === 'en' ? 'Highest' : '点数が高い順' },
+    { key:'amount_asc', label: lang === 'en' ? 'Lowest' : '点数が低い順' },
   ];
   el.innerHTML = modes.map(m => `<button class="catalog-sort-btn${m.key === currentOthersSort ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
   el.querySelectorAll('.catalog-sort-btn').forEach(btn => {
