@@ -944,6 +944,79 @@
   .item-stats-group summary .ig-count{font-weight:600; font-size:10.5px; color:var(--ink-soft);}
   .item-stats-group .item-stats-body{padding:12px;}
 
+  /* --- データ/フレンドタブ: スタイリッシュデザイン ------------------------ */
+  #pageData .stat-section-title{
+    position:relative; font-family:'Kaisei Decol', serif; font-size:15px;
+    border-bottom:none; padding:0 0 10px 14px; margin:26px 0 12px;
+    background:linear-gradient(90deg, var(--red), var(--gold), var(--teal)) left bottom / 100% 2px no-repeat;
+  }
+  #pageData .stat-section-title::before{
+    content:''; position:absolute; left:0; top:2px; width:6px; height:6px; border-radius:50%;
+    background:linear-gradient(135deg, var(--red), var(--gold));
+  }
+  #pageData .stat-cards{gap:10px;}
+  #pageData .stat-card{
+    border:none; border-radius:14px; padding:12px 12px 10px; position:relative; overflow:hidden;
+    background:linear-gradient(165deg, color-mix(in srgb, var(--sc, var(--ink)) 10%, #fff), #fff);
+    box-shadow:0 2px 10px rgba(36,32,24,0.09), inset 0 0 0 1px color-mix(in srgb, var(--sc, var(--ink)) 18%, transparent);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #pageData .stat-card::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background:var(--sc, var(--ink));
+  }
+  #pageData .stat-card:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(36,32,24,0.14); }
+  #pageData .my-record-row{
+    border-bottom:none; border-radius:12px; background:#fff; margin-bottom:8px;
+    padding:12px 14px 12px 18px; position:relative; box-shadow:0 1px 6px rgba(36,32,24,0.07);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #pageData .my-record-row::before{
+    content:''; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:3px;
+    background:linear-gradient(180deg, var(--teal), var(--gold));
+  }
+  #pageData .my-record-row:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(36,32,24,0.13); }
+  #pageData .my-record-row.selected-row{
+    border:2px solid var(--red-deep); box-shadow:0 4px 14px rgba(165,58,53,0.18); padding:12px 14px 12px 18px;
+  }
+  #pageData .rank-mode-tab{border-radius:999px;}
+  #pageData .catalog-sort-btn{border-radius:999px;}
+  #pageData .friend-search-input{border-radius:10px; box-shadow:0 1px 5px rgba(36,32,24,0.06);}
+
+  #pageFriends .settings-block{
+    background:#fff; border:none; border-radius:16px; padding:16px;
+    box-shadow:0 2px 12px rgba(36,32,24,0.09); position:relative; overflow:hidden;
+  }
+  #pageFriends .settings-block::before{
+    content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    background:linear-gradient(90deg, var(--red), var(--gold), var(--teal));
+  }
+  #pageFriends .settings-block > .settings-label{
+    font-family:'Kaisei Decol', serif; font-size:14px; letter-spacing:0.04em;
+    padding-bottom:6px; border-bottom:1.5px solid var(--line-soft);
+  }
+  #pageFriends .settings-row,
+  #pageFriends .account-row{
+    border-radius:10px; padding:9px 10px; transition:background .15s ease;
+  }
+  #pageFriends .settings-row:hover,
+  #pageFriends .account-row:hover{
+    background:color-mix(in srgb, var(--teal) 7%, transparent);
+  }
+  #pageFriends .settings-row[data-uid]{
+    position:relative; padding-left:18px;
+    background:color-mix(in srgb, var(--teal) 4%, #fff);
+    box-shadow:0 1px 4px rgba(36,32,24,0.06); margin-bottom:6px;
+  }
+  #pageFriends .settings-row[data-uid]::before{
+    content:''; position:absolute; left:6px; top:50%; transform:translateY(-50%);
+    width:7px; height:7px; border-radius:50%;
+    background:linear-gradient(135deg, var(--teal), var(--gold));
+  }
+  #pageFriends .lang-btn{border-radius:999px;}
+  #pageFriends .lang-btn.active{box-shadow:0 2px 6px rgba(36,32,24,0.18);}
+  #pageFriends .friend-search-input{border-radius:10px; box-shadow:0 1px 5px rgba(36,32,24,0.06);}
+
   @media (max-width:480px){
     h1{font-size:26px;}
     .valuation .amount{font-size:32px;}
