@@ -3026,11 +3026,15 @@ function renderRankModeTabs(){
   const modes = [
     { key:'default', label: lang === 'en' ? 'Default' : 'デフォルト' },
     { key:'variable', label: lang === 'en' ? 'Variable' : '変動数' },
-    { key:'simulation', label: lang === 'en' ? 'Simulation' : 'シミュレーション' },
+    { key:'simulation', label: lang === 'en' ? 'Weight Settings' : '重みづけ設定' },
   ];
   el.innerHTML = modes.map(m => `<button class="rank-mode-tab${m.key===currentRankMainMode ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
   el.querySelectorAll('.rank-mode-tab').forEach(btn => {
     btn.addEventListener('click', () => {
+      if(btn.dataset.mode === 'simulation'){
+        showPage('simulateWeights');
+        return;
+      }
       currentRankMainMode = btn.dataset.mode;
       el.querySelectorAll('.rank-mode-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
