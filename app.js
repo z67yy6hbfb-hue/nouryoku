@@ -3904,11 +3904,41 @@ async function loadOthersAssessments(){
 }
 
 let group2RowsData = [];
+let currentGroup2Sort = 'date_desc';
+const GROUP2_SORT_COMPARATORS = {
+  date_desc: (a, b) => b.dateMs - a.dateMs,
+  date_asc: (a, b) => a.dateMs - b.dateMs,
+  score_desc: (a, b) => b.score - a.score,
+  score_asc: (a, b) => a.score - b.score,
+};
+function renderGroup2SortTabs(){
+  const el = document.getElementById('group2SortTabs');
+  if(!el) return;
+  const modes = [
+    { key:'date_desc', label: lang === 'en' ? 'Newest' : '新しい順' },
+    { key:'date_asc', label: lang === 'en' ? 'Oldest' : '古い順' },
+    { key:'score_desc', label: lang === 'en' ? 'Highest' : '点数が高い順' },
+    { key:'score_asc', label: lang === 'en' ? 'Lowest' : '点数が低い順' },
+  ];
+  el.innerHTML = modes.map(m => `<button class="catalog-sort-btn${m.key === currentGroup2Sort ? ' active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('');
+  el.querySelectorAll('.catalog-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentGroup2Sort = btn.dataset.mode;
+      el.querySelectorAll('.catalog-sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyGroup2Filter();
+    });
+  });
+}
 function applyGroup2Filter(){
+  const container = document.getElementById('group2Content');
   const input = document.getElementById('group2SearchInput');
-  if(!input) return;
+  if(!container || !input) return;
   const q = input.value.trim().toLowerCase();
-  group2RowsData.forEach(rd => {
+  const comparator = GROUP2_SORT_COMPARATORS[currentGroup2Sort] || GROUP2_SORT_COMPARATORS.date_desc;
+  const sorted = group2RowsData.slice().sort(comparator);
+  sorted.forEach(rd => {
+    container.appendChild(rd.el);
     rd.el.style.display = (!q || rd.reviewer.toLowerCase().includes(q)) ? '' : 'none';
   });
 }
@@ -3942,15 +3972,23 @@ async function loadOthersAssessedMe(){
           editable: false,
         });
         appendImportButton(row, reviewerName || '', a);
-        group2RowsData.push({ el: row, reviewer: name });
+        const ts = a.updatedAt || a.createdAt;
+        const dateMs = ts && typeof ts.toMillis === 'function' ? ts.toMillis() : 0;
+        group2RowsData.push({ el: row, reviewer: name, dateMs, score: rankingScore(a.total || 0) });
       });
     }catch(err){ console.warn('loadOthersAssessedMe (internet part) failed:', err); }
     appendLocalGroupRows(el, entries, myName, 'otherToMe').forEach(({ el: rowEl, entry }) => {
-      group2RowsData.push({ el: rowEl, reviewer: entry.reviewerName || t('anon') });
+      group2RowsData.push({
+        el: rowEl,
+        reviewer: entry.reviewerName || t('anon'),
+        dateMs: new Date(entry.date).getTime() || 0,
+        score: rankingScore(entry.total || 0),
+      });
     });
     if(!el.children.length){
       el.innerHTML = `<div class="rank-empty">${lang === 'en' ? 'No one has assessed you yet.' : 'まだ誰からも鑑定されていません。'}</div>`;
     }
+    renderGroup2SortTabs();
     applyGroup2Filter();
   }catch(err){
     console.warn('loadOthersAssessedMe error:', err);
